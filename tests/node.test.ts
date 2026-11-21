@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createClient } from "../src/node";
-import { accepted, failure, mockFetch } from "./helpers";
+import { accepted, failure, mockFetch, silentServer } from "./helpers";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const options = { workspace: "acme", key: "ins_secret" };
@@ -179,5 +179,29 @@ describe("process lifetime", () => {
     expect(timers()).toBe(before + 1);
     clearTimeout(ref);
     await client.shutdown();
+  });
+});
+
+describe("a server in trouble", () => {
+  it("flush() sends a batch that waits for its retry now", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? failure(503, "unavailable") : accepted()));
+    const client = createClient(options);
+    client.track({ event: "order_placed", company: "c1" });
+    await client.flush();
+    expect(calls).toHaveLength(1);
+    await client.flush();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.body).toBe(calls[0]!.body);
+  });
+
+  it("shutdown() resolves when the server never answers", async () => {
+    silentServer();
+    const client = createClient(options);
+    client.track({ event: "order_placed", company: "c1" });
+    let done = false;
+    void client.shutdown().then(() => (done = true));
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(done).toBe(true);
+    expect(client.track({ event: "order_placed", company: "c1" })).toMatchObject({ ok: false });
   });
 });

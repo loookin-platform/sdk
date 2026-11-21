@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueue } from "../src/core/queue";
-import { accepted, event, failure, mockFetch } from "./helpers";
+import { accepted, event, failure, gate, json, mockFetch, silentServer } from "./helpers";
 
 const config = { url: "https://acme.loookin.com/api/events", key: "pub_abc" };
 
@@ -258,5 +258,235 @@ describe("throttled users", () => {
     await queue.flush();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(calls[1]!.events.map((e) => e.event)).toEqual(["thing_done"]);
+  });
+});
+
+describe("throttled users, odd answers", () => {
+  it("waits a default 30 s when the server does not say how long", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? accepted({ throttled: [{ user: "slow", count: 1 }] }) : accepted()));
+    const queue = createQueue();
+    queue.start(config);
+    const slow = event({ user: "slow" });
+    queue.push(slow);
+    await queue.flush();
+    expect(queue.items[0]!.notBefore).toBe(Date.now() + 30_000);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.events.map((e) => e.eventId)).toEqual([slow.eventId]);
+  });
+
+  it("never holds a throttled user's events for more than an hour", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? accepted({ throttled: [{ user: "slow", count: 1, retryAfter: 1e9 }] }) : accepted()));
+    const queue = createQueue();
+    queue.start(config);
+    queue.push(event({ user: "slow" }));
+    await queue.flush();
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(calls).toHaveLength(2);
+  });
+});
+
+describe("answers that are not the ingest's", () => {
+  it("keeps the batch and sends it again after a 200 with a login page", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? new Response("<html>Sign in</html>", { status: 200 }) : accepted()));
+    const queue = createQueue();
+    queue.start(config);
+    queue.push(event());
+    await queue.flush();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.body).toBe(calls[0]!.body);
+  });
+
+  it("resolves flush() and retries when the server never answers", async () => {
+    silentServer();
+    const queue = createQueue();
+    queue.start(config);
+    queue.push(event());
+    let done = false;
+    void queue.flush().then(() => (done = true));
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(done).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetch).toHaveBeenCalledTimes(2); // the same batch, after the backoff
+  });
+});
+
+describe("forced flush", () => {
+  it("sends a batch that waits for its retry at once, the timer keeps the backoff", async () => {
+    const calls = mockFetch((_, n) => (n <= 2 ? failure(503, "unavailable") : accepted()));
+    const queue = createQueue();
+    queue.start(config);
+    queue.push(event());
+    await queue.flush();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toHaveLength(2); // next retry in 2 s
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await queue.flush(); // what the timer does
+    expect(calls).toHaveLength(2);
+    await queue.flush(true);
+    expect(calls).toHaveLength(3);
+    expect(calls[2]!.body).toBe(calls[0]!.body);
+    expect(queue.items).toHaveLength(0);
+  });
+});
+
+describe("page hidden", () => {
+  /** A queue on a page the test can hide. */
+  function pageQueue() {
+    const page = { hidden: false };
+    const queue = createQueue();
+    queue.start({ ...config, hidden: () => page.hidden });
+    return { page, queue };
+  }
+  const ids = (events: { eventId: string }[]) => events.map((e) => e.eventId);
+  const size = (body: string) => new TextEncoder().encode(body).length;
+
+  it("sends the batch that waits for its retry and everything queued behind it", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? failure(503, "unavailable") : accepted()));
+    const { page, queue } = pageQueue();
+    const first = event();
+    queue.push(first);
+    await queue.flush();
+    const later = event(); // queued during the backoff
+    queue.push(later);
+
+    page.hidden = true;
+    await queue.flush(true);
+    expect(calls).toHaveLength(3);
+    expect(calls[1]!.body).toBe(calls[0]!.body);
+    expect(ids(calls[2]!.events)).toEqual([later.eventId]);
+    expect(calls[1]!.init.keepalive).toBe(true);
+    expect(queue.items).toHaveLength(0);
+  });
+
+  it("splits a waiting batch that is too big for a keepalive request", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? failure(503, "unavailable") : accepted()));
+    const { page, queue } = pageQueue();
+    const events = Array.from({ length: 25 }, () => event({ properties: { note: "x".repeat(5_000) } }));
+    for (const e of events) queue.push(e);
+    await queue.flush();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.init.keepalive).toBe(false); // one 125 kB batch from a visible page
+
+    page.hidden = true;
+    await queue.flush(true);
+    const again = calls.slice(1);
+    expect(again.length).toBeGreaterThan(1);
+    expect(again.flatMap((c) => ids(c.events))).toEqual(ids(events));
+    for (const call of again) {
+      expect(size(call.body)).toBeLessThanOrEqual(60_000);
+      expect(call.init.keepalive).toBe(true);
+    }
+  });
+
+  describe("with a request in flight", () => {
+    /** One event on its way, a second one queued behind it, then the page hides. */
+    async function hideMidFlight(sideAnswer: () => Response, later = [event()], first = event()) {
+      const inFlight = gate();
+      const calls = mockFetch((_, n) => (n === 1 ? inFlight.answer : n === 2 ? sideAnswer() : accepted()));
+      const { page, queue } = pageQueue();
+      queue.push(first);
+      void queue.flush();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toHaveLength(1);
+
+      for (const e of later) queue.push(e);
+      page.hidden = true;
+      const done = queue.flush(true);
+      void queue.flush(true); // pagehide right after visibilitychange
+      await vi.advanceTimersByTimeAsync(0);
+      return { calls, queue, inFlight, done, first, later };
+    }
+    /** How many times each event went out. */
+    const sends = (calls: { events: { eventId: string }[] }[], e: { eventId: string }) =>
+      calls.filter((c) => ids(c.events).includes(e.eventId)).length;
+
+    it("sends the rest right away in its own keepalive request, once", async () => {
+      const { calls, queue, inFlight, done, later } = await hideMidFlight(() => accepted());
+      expect(calls).toHaveLength(2);
+      expect(ids(calls[1]!.events)).toEqual(ids(later));
+      expect(calls[1]!.init.keepalive).toBe(true);
+
+      inFlight.open(accepted());
+      await done;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(calls).toHaveLength(2);
+      expect(queue.items).toHaveLength(0);
+    });
+
+    it("retries only the request in flight when that one fails", async () => {
+      const { calls, queue, inFlight, done, first, later } = await hideMidFlight(() => accepted());
+      inFlight.open(failure(503, "unavailable"));
+      await done;
+      expect(calls).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(calls).toHaveLength(3);
+      expect(calls[2]!.body).toBe(calls[0]!.body);
+      expect(sends(calls, first)).toBe(2);
+      expect(sends(calls, later[0]!)).toBe(1);
+      expect(queue.items).toHaveLength(0);
+    });
+
+    it("sends the rest again when its own request fails", async () => {
+      const { calls, queue, inFlight, done, first, later } = await hideMidFlight(() => failure(503, "unavailable"));
+      expect(calls).toHaveLength(2);
+      inFlight.open(accepted());
+      await done;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(calls).toHaveLength(3);
+      expect(ids(calls[2]!.events)).toEqual(ids(later));
+      expect(sends(calls, first)).toBe(1);
+      expect(queue.items).toHaveLength(0);
+    });
+
+    it("keeps one retry going when both requests fail", async () => {
+      const { calls, queue, inFlight, done, first, later } = await hideMidFlight(() => failure(503, "unavailable"));
+      inFlight.open(failure(503, "unavailable"));
+      await done;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(sends(calls, first)).toBe(2);
+      expect(sends(calls, later[0]!)).toBe(2);
+      expect(queue.items).toHaveLength(0);
+    });
+
+    it("puts a throttled user's events back whichever answer says so", async () => {
+      const { calls, queue, inFlight, done, later } = await hideMidFlight(() =>
+        accepted({ throttled: [{ user: "u1", count: 1, retryAfter: 30 }] }),
+      );
+      expect(ids(queue.items.map((item) => item.event))).toEqual(ids(later));
+      inFlight.open(accepted());
+      await done;
+      expect(calls).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(calls).toHaveLength(3);
+      expect(ids(calls[2]!.events)).toEqual(ids(later));
+    });
+
+    it("stops for good when either answer refuses the key", async () => {
+      const { calls, queue, inFlight, done } = await hideMidFlight(() => failure(401, "Unauthorized"));
+      expect(queue.disabled).toBe(true);
+      inFlight.open(accepted({ throttled: [{ user: "u1", count: 1, retryAfter: 1 }] }));
+      await done;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(calls).toHaveLength(2);
+      expect(queue.items).toHaveLength(0);
+    });
+
+    it("keeps both requests together inside the keepalive budget", async () => {
+      const note = (length: number) => event({ properties: { note: "x".repeat(length) } });
+      const big = Array.from({ length: 20 }, () => note(5_000));
+      const { calls, inFlight, done, later } = await hideMidFlight(() => accepted(), big, note(30_000));
+      // Sent one after another while the first request is still on its way.
+      expect(calls.length).toBeGreaterThan(2);
+      for (const call of calls.slice(1)) expect(size(calls[0]!.body) + size(call.body)).toBeLessThanOrEqual(60_000);
+      inFlight.open(accepted());
+      await done;
+      expect(calls.slice(1).flatMap((c) => ids(c.events))).toEqual(ids(later));
+    });
   });
 });

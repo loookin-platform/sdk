@@ -452,3 +452,35 @@ describe("stop()", () => {
     expect(fetch).not.toHaveBeenCalled(); // stop() still took effect
   });
 });
+
+describe("while the server is failing", () => {
+  it("sends the waiting batch and the queue at once when the page is hidden", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? failure(503, "unavailable") : accepted()));
+    const loookin = await loadSdk();
+    loookin.init(options);
+    loookin.identify("u1");
+    loookin.track("draft_saved");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(1); // failed: the next attempt is a second away
+    loookin.track("draft_closed");
+
+    hidePage();
+    leavePage();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.slice(1).flatMap((c) => c.events).map((e) => e.event)).toEqual(["draft_saved", "draft_closed"]);
+    for (const call of calls.slice(1)) expect(call.init.keepalive).toBe(true);
+  });
+
+  it("flush() sends the waiting batch now", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? failure(503, "unavailable") : accepted()));
+    const loookin = await loadSdk();
+    loookin.init(options);
+    loookin.identify("u1");
+    loookin.track("draft_saved");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(1);
+    await loookin.flush();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.body).toBe(calls[0]!.body);
+  });
+});

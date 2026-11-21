@@ -102,7 +102,7 @@ export function createClient(options: ClientOptions): Client {
         return fail(String(error));
       }
     },
-    flush: () => queue.flush(),
+    flush: () => queue.flush(true),
     async shutdown() {
       if (closed) return;
       closed = true;

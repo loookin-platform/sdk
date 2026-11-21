@@ -46,9 +46,9 @@ Property values are flat: text, number, boolean or `null`.
 | `loookin.init(options)` | Configures the client. A second call is ignored. |
 | `loookin.identify(user, { company? })` | Sets who the following events belong to and releases events that were waiting. |
 | `loookin.track(event, properties?)` | Queues an event. Never throws. |
-| `loookin.flush()` | Sends the queue now. Returns a promise that resolves after the attempt. |
+| `loookin.flush()` | Sends the queue now, without waiting for a retry delay. Returns a promise that resolves after the attempt. |
 | `loookin.reset()` | Forgets the identity, for example on logout. |
-| `loookin.stop()` | Drops everything that is queued and sends nothing more until the page reloads, for example when a user opts out. |
+| `loookin.stop()` | Drops everything that is queued, removes the stored device id and sends nothing more until the page reloads, for example when a user opts out. |
 
 ### Options
 
@@ -72,8 +72,11 @@ Every event also carries `context.platform = "web"` and `context.device_type`
   as soon as 30 are waiting, and when the page is hidden or closed.
 - Each event gets its id and timestamp when you call `track`, not when it is
   sent. The server deduplicates by id, so a retry never counts twice.
-- On a network error, a 5xx answer or a rate limit the same batch is sent
-  again, with a growing delay of up to a minute.
+- On a network error, a 5xx answer, a rate limit, no answer within 15 seconds
+  or an answer that does not come from Loookin (a proxy or login page) the
+  same batch is sent again, with a growing delay of up to a minute. When the
+  page is hidden or closed, or you call `flush()`, the SDK does not wait for
+  that delay.
 - If the server refuses the key, the origin, or the workspace is over its
   quota, the SDK stops sending until the next page load.
 - The queue holds at most 1000 events. When it is full, the oldest are dropped.
@@ -109,7 +112,8 @@ Please note:
 - If the browser blocks storage, the id lives only as long as the page.
 
 Without `anonymous: true` the SDK never reads or writes `localStorage`,
-`sessionStorage` or cookies.
+`sessionStorage` or cookies. The one exception is `stop()`, which always
+removes `loookin_device`, in case an earlier visit stored it.
 
 ## Auto-tracking
 
@@ -125,15 +129,16 @@ loookin.init({
 
 | Option | Event | Properties | When |
 |---|---|---|---|
-| `pageViews` | `page_viewed` | `page` (the path), `referrer` (on the first view, when there is one) | On `init`, and whenever the path changes without a page load (`history.pushState`, `history.replaceState`, back and forward) |
+| `pageViews` | `page_viewed` | `page` (the path), `referrer` (origin and path of the page the visitor came from; on the first view, when there is one) | On `init`, and whenever the path changes without a page load (`history.pushState`, `history.replaceState`, back and forward) |
 | `campaigns` | `campaign_arrived` | `utm_source`, `utm_medium`, `utm_campaign` (those present in the address), `landing_page` (the path) | Once per page load, when the address has at least one of the three parameters |
 
 These events go through the same queue as your own. They need a user like any
 other event: without anonymous mode they wait for `identify`. They also count
 toward your workspace's event quota.
 
-Only the path is sent as `page` and `landing_page`, never the query string or
-the hash. With `pageViews` on, the SDK wraps `history.pushState` and
+Only the path is sent as `page` and `landing_page`, and only the origin and
+path as `referrer`: never the query string or the hash, of your page or of the
+page the visitor came from. With `pageViews` on, the SDK wraps `history.pushState` and
 `history.replaceState`; with it off, it does not touch them.
 
 ## Debug and dry run
@@ -166,7 +171,7 @@ SDK refuses them and sends nothing.
   content or browser fingerprints. Page views and campaign arrivals are sent
   only if you turn them on.
 - It does not use cookies, and it does not use browser storage unless you turn
-  on anonymous mode.
+  on anonymous mode (`stop()` only removes the device id).
 - It does not read data back from your workspace.
 - It does not persist the queue or sync between tabs.
 - It does not link an anonymous visitor's history to the user they sign in as.
@@ -180,7 +185,7 @@ user, so every event names its `company`, its `user`, or both.
 ```js
 import { createClient } from "@loookin/sdk/node";
 
-const loookin = createClient({ workspace: "acme", key: process.env.LOOOKIN_KEY });
+const loookin = createClient({ workspace: "acme", key: process.env.LOOOKIN_KEY ?? "" });
 
 const result = loookin.track({
   event: "order_placed",
@@ -199,7 +204,7 @@ await loookin.shutdown();
 |---|---|
 | `createClient({ workspace, key, debug?, dryRun? })` | Creates a client. You can create as many as you need. |
 | `client.track({ event, company?, user?, properties?, timestamp?, context? })` | Queues an event and returns `{ ok: true }`, or `{ ok: false, error }` when the event cannot be sent as given. Never throws. |
-| `client.flush()` | Sends the queue now. Resolves after the attempt. |
+| `client.flush()` | Sends the queue now, without waiting for a retry delay. Resolves after the attempt. |
 | `client.shutdown()` | Sends what is queued, waits for it and stops the client. |
 
 `timestamp` is an ISO 8601 string or a `Date`; it defaults to now. `context`

@@ -375,3 +375,61 @@ describe("safety", () => {
     expect(ids[1]).not.toBe(ids[0]);
   });
 });
+
+describe("stop()", () => {
+  it("drops queued events and sends nothing afterwards", async () => {
+    const calls = mockFetch();
+    const loookin = await loadSdk();
+    loookin.init(options);
+    loookin.identify("u1", { company: "c1" });
+    loookin.track("queued_before_stop");
+    loookin.stop();
+    loookin.track("tracked_after_stop");
+    await loookin.flush();
+    await vi.advanceTimersByTimeAsync(60_000);
+    hidePage();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("drops events that were still waiting for identify()", async () => {
+    const calls = mockFetch();
+    const loookin = await loadSdk();
+    loookin.init(options);
+    loookin.track("waiting_for_identity");
+    loookin.stop();
+    loookin.identify("u1");
+    await loookin.flush();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("is final for the page: a later init() does not start sending again", async () => {
+    const calls = mockFetch();
+    const loookin = await loadSdk();
+    loookin.stop();
+    loookin.init(options);
+    loookin.identify("u1");
+    loookin.track("after_stop");
+    await loookin.flush();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("removes the device id in anonymous mode", async () => {
+    mockFetch();
+    const loookin = await loadSdk();
+    loookin.init({ ...options, anonymous: true });
+    expect(localStorage.getItem("loookin_device")).toMatch(UUID);
+    loookin.stop();
+    expect(localStorage.getItem("loookin_device")).toBeNull();
+  });
+
+  it("does not touch storage when anonymous mode is off", async () => {
+    mockFetch();
+    const remove = vi.spyOn(Storage.prototype, "removeItem");
+    const loookin = await loadSdk();
+    loookin.init(options);
+    loookin.stop();
+    expect(remove).not.toHaveBeenCalled();
+    remove.mockRestore();
+  });
+});

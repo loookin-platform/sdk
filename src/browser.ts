@@ -156,6 +156,23 @@ function reset() {
   if (options?.anonymous) user = deviceId(true);
 }
 
+/**
+ * Opt-out: drops everything that is queued and sends nothing more until the
+ * page reloads. A request that is already on its way cannot be recalled.
+ */
+function stop() {
+  if (!hasDom()) return;
+  user = company = undefined;
+  if (options?.anonymous) {
+    try {
+      localStorage.removeItem(DEVICE_KEY);
+    } catch {
+      // storage is blocked: there was nothing to remove
+    }
+  }
+  queue.disable("stop() was called. Nothing more will be sent until the page reloads.");
+}
+
 /** Nothing the SDK does may throw into the host page. */
 function guard<A extends unknown[]>(fn: (...args: A) => void) {
   return (...args: A): void => {
@@ -178,4 +195,6 @@ export const loookin = {
   flush: (): Promise<void> => (hasDom() ? queue.flush() : Promise.resolve()),
   /** Forgets the identity. In anonymous mode a new device id is created. */
   reset: guard(reset),
+  /** Drops the queue and stops sending until the page reloads, for example when a user opts out. */
+  stop: guard(stop),
 };

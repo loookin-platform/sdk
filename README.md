@@ -4,7 +4,7 @@ A small JavaScript SDK that sends product usage events to your Loookin workspace
 It queues events in memory, sends them in batches, retries when the network or
 the server fails, and stays out of the way of your page.
 
-- About 3 kB gzipped, no dependencies, ESM only, types included
+- Under 4 kB gzipped in the browser, no dependencies, ESM only, types included
 - Never throws into your code and never blocks the page
 - Collects nothing on its own: only what you pass to `track`, plus page views
   and campaign arrivals if you turn them on

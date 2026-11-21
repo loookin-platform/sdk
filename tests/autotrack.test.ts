@@ -69,6 +69,15 @@ describe("page views", () => {
     ]);
   });
 
+  it("sends the referrer without its query string and hash", async () => {
+    setReferrer("https://search.example/results?q=private+words&email=jane%40example.com#top");
+    const calls = mockFetch();
+    const loookin = await loadSdk();
+    loookin.init({ ...options, autoTrack: { pageViews: true } });
+    loookin.identify("u1");
+    expect(await sent(loookin, calls)).toEqual([["page_viewed", { page: "/", referrer: "https://search.example/results" }]]);
+  });
+
   it("leaves the referrer out when there is none", async () => {
     open("/pricing");
     const calls = mockFetch();

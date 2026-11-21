@@ -163,12 +163,11 @@ function reset() {
 function stop() {
   if (!hasDom()) return;
   user = company = undefined;
-  if (options?.anonymous) {
-    try {
-      localStorage.removeItem(DEVICE_KEY);
-    } catch {
-      // storage is blocked: there was nothing to remove
-    }
+  // Also before init() and without anonymous mode: an earlier visit may have stored the id.
+  try {
+    localStorage.removeItem(DEVICE_KEY);
+  } catch {
+    // storage is blocked: there was nothing to remove
   }
   queue.disable("stop() was called. Nothing more will be sent until the page reloads.");
 }

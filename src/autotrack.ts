@@ -9,6 +9,16 @@ export interface AutoTrackOptions {
 
 const UTM = ["utm_source", "utm_medium", "utm_campaign"] as const;
 
+/** Where the visitor came from, without the query string and the hash: they may carry personal data. */
+function referrerPage(): string {
+  try {
+    const url = new URL(document.referrer);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return ""; // no referrer
+  }
+}
+
 /**
  * Starts the automatic events that were asked for. Call once per page load.
  * `track` must never throw.
@@ -32,7 +42,7 @@ export function startAutoTrack(options: AutoTrackOptions, track: (event: string,
     const page = location.pathname;
     if (page === last) return;
     // The referrer describes how the visitor arrived, so it goes with the first view only.
-    const referrer = last === undefined ? document.referrer : "";
+    const referrer = last === undefined ? referrerPage() : "";
     last = page;
     track("page_viewed", referrer ? { page, referrer } : { page });
   };

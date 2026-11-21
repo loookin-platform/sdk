@@ -423,13 +423,32 @@ describe("stop()", () => {
     expect(localStorage.getItem("loookin_device")).toBeNull();
   });
 
-  it("does not touch storage when anonymous mode is off", async () => {
+  it("removes a device id from an earlier visit, also before init() and with anonymous mode off", async () => {
     mockFetch();
-    const remove = vi.spyOn(Storage.prototype, "removeItem");
-    const loookin = await loadSdk();
+    localStorage.setItem("loookin_device", "left-by-an-earlier-visit");
+    let loookin = await loadSdk();
+    loookin.stop(); // opt-out before init()
+    expect(localStorage.getItem("loookin_device")).toBeNull();
+
+    localStorage.setItem("loookin_device", "left-by-an-earlier-visit");
+    loookin = await loadSdk();
     loookin.init(options);
     loookin.stop();
-    expect(remove).not.toHaveBeenCalled();
-    remove.mockRestore();
+    expect(localStorage.getItem("loookin_device")).toBeNull();
+  });
+
+  it("does not throw when storage is unavailable", async () => {
+    mockFetch();
+    const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    const loookin = await loadSdk();
+    expect(() => loookin.stop()).not.toThrow();
+    expect(remove).toHaveBeenCalledWith("loookin_device");
+    loookin.init(options);
+    loookin.identify("u1");
+    loookin.track("after_stop");
+    await loookin.flush();
+    expect(fetch).not.toHaveBeenCalled(); // stop() still took effect
   });
 });

@@ -48,6 +48,7 @@ Property values are flat: text, number, boolean or `null`.
 | `loookin.track(event, properties?)` | Queues an event. Never throws. |
 | `loookin.flush()` | Sends the queue now. Returns a promise that resolves after the attempt. |
 | `loookin.reset()` | Forgets the identity, for example on logout. |
+| `loookin.stop()` | Drops everything that is queued and sends nothing more until the page reloads, for example when a user opts out. |
 
 ### Options
 

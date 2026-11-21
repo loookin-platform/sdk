@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import { accepted, failure, mockFetch } from "./helpers";
-import { hidePage, loadSdk, setupPage, setWidth } from "./page";
+import { hidePage, leavePage, loadSdk, setupPage, setWidth, showPage } from "./page";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const options = { workspace: "acme", key: "pub_abc" };
@@ -58,6 +58,30 @@ describe("tracking an identified user", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.events).toHaveLength(2);
     expect(calls[0]!.init.keepalive).toBe(true);
+  });
+
+  it("sends the queue on pagehide, in keepalive-sized batches, and only once", async () => {
+    const calls = mockFetch();
+    const loookin = await loadSdk();
+    loookin.init(options);
+    loookin.identify("u1");
+    for (let i = 0; i < 25; i++) loookin.track("draft_saved", { note: "x".repeat(5_000) });
+    leavePage(); // Safari: pagehide may come while the page still counts as visible
+    hidePage();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.length).toBeGreaterThan(1);
+    expect(calls.flatMap((c) => c.events).length).toBe(25);
+    expect(new Set(calls.flatMap((c) => c.events).map((e) => e.eventId)).size).toBe(25);
+    for (const call of calls) {
+      expect(call.body.length).toBeLessThanOrEqual(60_000);
+      expect(call.init.keepalive).toBe(true);
+    }
+
+    showPage(); // back from the back/forward cache
+    for (let i = 0; i < 25; i++) loookin.track("draft_saved", { note: "x".repeat(5_000) });
+    const before = calls.length;
+    await loookin.flush();
+    expect(calls).toHaveLength(before + 1);
   });
 
   it.each(["network error", "503"])("sends the same events again after a %s", async (kind) => {

@@ -1,3 +1,4 @@
+import { startAutoTrack } from "./autotrack";
 import { createLogger, silent, type Logger } from "./core/debug";
 import { createQueue } from "./core/queue";
 import { cleanId, resolveOrigin } from "./core/types";
@@ -15,6 +16,8 @@ let company: string | undefined;
 /** Context known from init(): app_version and session. */
 let extra: Partial<EventContext> = {};
 let warnedServerKey = false;
+/** True between pagehide and pageshow: the page may be gone any moment. */
+let leaving = false;
 
 /** False during server-side rendering, where every call is a no-op. */
 const hasDom = () => typeof window !== "undefined" && typeof document !== "undefined";
@@ -99,17 +102,30 @@ function init(opts: InitOptions) {
     url: `${origin}/api/events${opts.dryRun ? "?dryRun=true" : ""}`,
     key,
     log,
-    hidden: () => document.visibilityState === "hidden",
+    hidden: () => leaving || document.visibilityState === "hidden",
   });
   if (opts.anonymous && !user) setIdentity(deviceId());
   else if (user) void queue.flush();
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "hidden") return;
+  // Safari does not always fire visibilitychange when a page is closed, so
+  // pagehide is watched too. A second flush finds nothing left to send.
+  const onHide = () => {
     const waiting = queue.items.filter((item) => !item.event.user).length;
     if (waiting) log(`${waiting} event(s) are waiting for identify() and are lost if the page closes now`);
     void queue.flush();
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") onHide();
   });
+  window.addEventListener("pagehide", () => {
+    leaving = true;
+    onHide();
+  });
+  window.addEventListener("pageshow", () => {
+    leaving = false;
+  });
+
+  if (opts.autoTrack) startAutoTrack(opts.autoTrack, guard(track));
 }
 
 function identify(id: string, opts?: IdentifyOptions) {

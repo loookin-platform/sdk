@@ -6,9 +6,8 @@ the server fails, and stays out of the way of your page.
 
 - About 3 kB gzipped, no dependencies, ESM only, types included
 - Never throws into your code and never blocks the page
-- Collects nothing on its own: only what you pass to `track`
-
-Automatic page view tracking is coming in a later release.
+- Collects nothing on its own: only what you pass to `track`, plus page views
+  and campaign arrivals if you turn them on
 
 ## Install
 
@@ -57,6 +56,7 @@ Property values are flat: text, number, boolean or `null`.
 | `workspace` | `string` | required | Workspace slug (`"acme"`) or its full origin (`"https://acme.loookin.com"`) |
 | `key` | `string` | required | Publishable key, `pub_...` |
 | `anonymous` | `boolean` | `false` | Measure visitors before `identify`, see below |
+| `autoTrack` | `{ pageViews?: boolean; campaigns?: boolean }` | both `false` | Events the SDK sends on its own, see below |
 | `appVersion` | `string` | none | Sent with every event as `context.app_version` |
 | `session` | `string` | none | Sent with every event as `context.session` |
 | `debug` | `boolean` | `false` | Log what is sent and what the server answered |
@@ -110,6 +110,31 @@ Please note:
 Without `anonymous: true` the SDK never reads or writes `localStorage`,
 `sessionStorage` or cookies.
 
+## Auto-tracking
+
+Off by default. Turn on what you want in `init`:
+
+```js
+loookin.init({
+  workspace: "acme",
+  key: "pub_...",
+  autoTrack: { pageViews: true, campaigns: true },
+});
+```
+
+| Option | Event | Properties | When |
+|---|---|---|---|
+| `pageViews` | `page_viewed` | `page` (the path), `referrer` (when there is one) | On `init`, and whenever the path changes without a page load (`history.pushState`, `history.replaceState`, back and forward) |
+| `campaigns` | `campaign_arrived` | `utm_source`, `utm_medium`, `utm_campaign` (those present in the address), `landing_page` (the path) | Once per page load, when the address has at least one of the three parameters |
+
+These events go through the same queue as your own. They need a user like any
+other event: without anonymous mode they wait for `identify`. They also count
+toward your workspace's event quota.
+
+Only the path is sent as `page` and `landing_page`, never the query string or
+the hash. With `pageViews` on, the SDK wraps `history.pushState` and
+`history.replaceState`; with it off, it does not touch them.
+
 ## Debug and dry run
 
 ```js
@@ -137,7 +162,8 @@ SDK refuses them and sends nothing.
 ## What the SDK does not do
 
 - It does not collect anything on its own: no clicks, form contents, page
-  content or browser fingerprints.
+  content or browser fingerprints. Page views and campaign arrivals are sent
+  only if you turn them on.
 - It does not use cookies, and it does not use browser storage unless you turn
   on anonymous mode.
 - It does not read data back from your workspace.
@@ -201,6 +227,24 @@ npm test
 npm run build
 npm run size   # fails if the gzipped browser entry is over 5 kB
 ```
+
+A page for trying the browser entry by hand is in `examples/browser/index.html`
+(build first, then serve the repository root over http). A script for the
+server entry is in `examples/node/send.mjs`.
+
+## Releasing
+
+For maintainers. Releases are published to npm by the `Release` workflow when a
+version tag is pushed. It uses npm trusted publishing, so there is no token to
+manage.
+
+1. Update `version` in `package.json` (and `package-lock.json`, for example
+   with `npm version 0.2.0 --no-git-tag-version`) in a pull request and merge it.
+2. Tag the merged commit: `git tag v0.2.0`. The tag must match the version in
+   `package.json`, otherwise the workflow stops before publishing.
+3. Push the tag: `git push origin v0.2.0`.
+
+A change that breaks existing calls needs a new major version.
 
 ## License
 

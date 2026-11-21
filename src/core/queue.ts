@@ -109,10 +109,10 @@ export function createQueue() {
     if (reason) log(reason);
   }
 
-  async function run(cfg: QueueConfig): Promise<void> {
+  async function run(cfg: QueueConfig, force: boolean): Promise<void> {
     while (!disabled) {
       const batch = held ?? take(Date.now());
-      if (!batch || batch.at > Date.now()) return;
+      if (!batch || (!force && batch.at > Date.now())) return;
       held = batch;
       const result = await send(cfg.url, cfg.key, batch.body, batch.bytes <= MAX_KEEPALIVE_BYTES);
       if (disabled) return;
@@ -122,6 +122,7 @@ export function createQueue() {
         const delay = Math.ceil(seconds * 1000 * (1 + Math.random() * 0.25));
         batch.attempt++;
         batch.at = Date.now() + delay;
+        clearTimeout(retryTimer);
         retryTimer = setTimeout(flush, delay);
         (retryTimer as { unref?: () => void }).unref?.();
         log(
@@ -162,11 +163,15 @@ export function createQueue() {
     }
   }
 
-  /** Sends what can be sent now. Resolves after the attempt; never rejects. */
-  function flush(): Promise<void> {
+  /**
+   * Sends what can be sent now. Resolves after the attempt; never rejects.
+   * `force` also sends a batch that is waiting for its retry time.
+   */
+  function flush(force?: unknown): Promise<void> {
     if (!config || disabled) return Promise.resolve();
     const cfg = config;
-    running ??= run(cfg)
+    if (force === true && running) return running.then(() => flush(true));
+    running ??= run(cfg, force === true)
       .catch((error) => log("unexpected error", error))
       .finally(() => {
         running = undefined;

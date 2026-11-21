@@ -8,7 +8,7 @@ the server fails, and stays out of the way of your page.
 - Never throws into your code and never blocks the page
 - Collects nothing on its own: only what you pass to `track`
 
-Entries for Node.js and automatic page view tracking are coming in later releases.
+Automatic page view tracking is coming in a later release.
 
 ## Install
 
@@ -125,10 +125,10 @@ prints nothing.
 Combine it with `debug` to see what would be accepted while you wire things up,
 without filling your workspace with test data.
 
-If nothing arrives and debug shows requests failing, check that the origin of
-your page (scheme, host and port) is on the key's list of allowed origins. A
-browser hides the server's answer from a page whose origin is not allowed, so
-the SDK can only report it as a failed request.
+If the server refuses the origin of your page or the key itself, the SDK says
+so once under `debug` and stops sending until the next page load. To fix a
+refused origin, add the origin of your page (scheme, host and port) to the
+key's list of allowed origins.
 
 One message is printed even without `debug`: an error when a server key
 (`ins_...`) is passed to `init`. Server keys must never ship to a browser. The
@@ -143,6 +143,45 @@ SDK refuses them and sends nothing.
 - It does not read data back from your workspace.
 - It does not persist the queue or sync between tabs.
 - It does not link an anonymous visitor's history to the user they sign in as.
+
+## From your server
+
+Events that happen on your backend (an order, a webhook, an import) are sent
+with a server key (`ins_...`) from Node.js 22 or newer. A server has no current
+user, so every event names its `company`, its `user`, or both.
+
+```js
+import { createClient } from "@loookin/sdk/node";
+
+const loookin = createClient({ workspace: "acme", key: process.env.LOOOKIN_KEY });
+
+const result = loookin.track({
+  event: "order_placed",
+  company: "company_193",
+  user: "user_8421",
+  properties: { total: 129.5, currency: "EUR" },
+  context: { source: "api" },
+});
+if (!result.ok) console.warn(result.error);
+
+// Before the process exits (scripts, serverless functions):
+await loookin.shutdown();
+```
+
+| Call | What it does |
+|---|---|
+| `createClient({ workspace, key, debug?, dryRun? })` | Creates a client. You can create as many as you need. |
+| `client.track({ event, company?, user?, properties?, timestamp?, context? })` | Queues an event and returns `{ ok: true }`, or `{ ok: false, error }` when the event cannot be sent as given. Never throws. |
+| `client.flush()` | Sends the queue now. Resolves after the attempt. |
+| `client.shutdown()` | Sends what is queued, waits for it and stops the client. |
+
+`timestamp` is an ISO 8601 string or a `Date`; it defaults to now. `context`
+may carry `source`, `session`, `device_type`, `app_version` and `os`;
+`platform` is always `"server"`. Batching, retries and `debug` / `dryRun` work
+as in the browser. The flush timer does not keep your process alive, so call
+`shutdown()` (or `flush()`) before exiting, otherwise queued events are lost.
+
+Keep server keys on the server. Never put one into code that ships to a browser.
 
 ## Server-side rendering
 

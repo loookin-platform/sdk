@@ -28,6 +28,9 @@ export interface EventContext {
   device_type?: "desktop" | "mobile" | "tablet";
   app_version?: string;
   session?: string;
+  /** Who triggered the action, for example "user", "api", "ai" or "system". */
+  source?: string;
+  os?: string;
 }
 
 /** One event as it travels to the server. */

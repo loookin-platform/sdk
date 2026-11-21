@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@loookin/sdk manual test</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; }
+      fieldset { margin: 0 0 16px; padding: 12px 16px; border: 1px solid #ccc; border-radius: 8px; }
+      label { display: inline-block; margin: 4px 12px 4px 0; }
+      input[type="text"] { font: inherit; padding: 4px 8px; width: 220px; }
+      button { font: inherit; padding: 4px 12px; margin: 4px 8px 4px 0; }
+      pre { background: #111; color: #ddd; padding: 12px; border-radius: 8px; min-height: 160px; white-space: pre-wrap; word-break: break-word; }
+    </style>
+  </head>
+  <body>
+    <h1>@loookin/sdk manual test</h1>
+    <!--
+      How to use:
+        npm run build
+        npx serve .        (or: python3 -m http.server 3000)
+      then open /examples/browser/ and add this page's origin (for example
+      http://localhost:3000) to the allowed origins of your publishable key.
+      Nothing is stored in this file: type the workspace and key below.
+    -->
+    <p>Build the package, serve the repository root over http and open this page. Debug output is shown below and in the console.</p>
+
+    <fieldset>
+      <legend>1. Init (once per page load, reload to change)</legend>
+      <label>Workspace <input type="text" id="workspace" placeholder="acme or https://acme.loookin.com" autocomplete="off" /></label>
+      <label>Key <input type="text" id="key" placeholder="pub_..." autocomplete="off" /></label><br />
+      <label><input type="checkbox" id="anonymous" /> anonymous</label>
+      <label><input type="checkbox" id="pageViews" /> autoTrack.pageViews</label>
+      <label><input type="checkbox" id="campaigns" /> autoTrack.campaigns</label>
+      <label><input type="checkbox" id="dryRun" checked /> dryRun</label><br />
+      <button id="init">Init</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>2. Identify</legend>
+      <label>User <input type="text" id="user" value="example-user-1" /></label>
+      <label>Company <input type="text" id="company" value="example-company-1" /></label><br />
+      <button id="identify">Identify</button>
+      <button id="reset">Reset</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>3. Track</legend>
+      <label>Event <input type="text" id="event" value="example_clicked" /></label>
+      <label>Properties (JSON) <input type="text" id="properties" value='{"position": 1}' /></label><br />
+      <button id="track">Track</button>
+      <button id="track40">Track 40</button>
+      <button id="flush">Flush</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>4. Navigate without a page load</legend>
+      <button data-path="?page=one">pushState ?page=one (same path)</button>
+      <button data-path="#section">pushState #section (same path)</button>
+      <button id="back">Back</button>
+      <p>Path changes need a server that answers every path with this file. Add <code>?utm_source=test&amp;utm_campaign=manual</code> to the address and reload to try campaigns.</p>
+    </fieldset>
+
+    <pre id="log"></pre>
+
+    <script type="module">
+      import { loookin } from "../../dist/browser.js";
+
+      const $ = (id) => document.getElementById(id);
+      const out = $("log");
+      const show = (...args) => {
+        out.textContent += args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") + "\n";
+      };
+      // Mirror the SDK's debug output into the page.
+      for (const method of ["log", "error"]) {
+        const original = console[method].bind(console);
+        console[method] = (...args) => {
+          original(...args);
+          show(...args);
+        };
+      }
+
+      $("init").onclick = () => {
+        loookin.init({
+          workspace: $("workspace").value,
+          key: $("key").value,
+          anonymous: $("anonymous").checked,
+          autoTrack: { pageViews: $("pageViews").checked, campaigns: $("campaigns").checked },
+          dryRun: $("dryRun").checked,
+          debug: true,
+        });
+        show("> init");
+      };
+      $("identify").onclick = () => {
+        loookin.identify($("user").value, { company: $("company").value || undefined });
+        show("> identify", $("user").value);
+      };
+      $("reset").onclick = () => {
+        loookin.reset();
+        show("> reset");
+      };
+      const properties = () => {
+        try {
+          return JSON.parse($("properties").value || "{}");
+        } catch {
+          show("Properties are not valid JSON, sending none.");
+          return undefined;
+        }
+      };
+      $("track").onclick = () => {
+        loookin.track($("event").value, properties());
+        show("> track", $("event").value);
+      };
+      $("track40").onclick = () => {
+        for (let i = 0; i < 40; i++) loookin.track($("event").value, { position: i });
+        show("> track x 40");
+      };
+      $("flush").onclick = () => loookin.flush().then(() => show("> flush done"));
+      for (const button of document.querySelectorAll("[data-path]")) {
+        button.onclick = () => {
+          history.pushState(null, "", button.dataset.path);
+          show("> pushState", location.pathname + location.search + location.hash);
+        };
+      }
+      $("back").onclick = () => history.back();
+    </script>
+  </body>
+</html>

@@ -1,9 +1,10 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  // One entry per public export. The server entry will be added here as
-  // `node: "src/node.ts"` together with a "./node" export in package.json.
-  entry: { browser: "src/browser.ts" },
+  // One entry per public export in package.json. No shared chunks: each
+  // entry is self-contained, so the browser file carries no server code.
+  entry: { browser: "src/browser.ts", node: "src/node.ts" },
+  splitting: false,
   format: ["esm"],
   target: "es2020",
   dts: true,

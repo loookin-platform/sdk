@@ -4,11 +4,10 @@ A small JavaScript SDK that sends product usage events to your Loookin workspace
 It queues events in memory, sends them in batches, retries when the network or
 the server fails, and stays out of the way of your page.
 
-- About 3 kB gzipped, no dependencies, ESM only, types included
+- Under 4 kB gzipped in the browser, no dependencies, ESM only, types included
 - Never throws into your code and never blocks the page
-- Collects nothing on its own: only what you pass to `track`
-
-Entries for Node.js and automatic page view tracking are coming in later releases.
+- Collects nothing on its own: only what you pass to `track`, plus page views
+  and campaign arrivals if you turn them on
 
 ## Install
 
@@ -57,6 +56,7 @@ Property values are flat: text, number, boolean or `null`.
 | `workspace` | `string` | required | Workspace slug (`"acme"`) or its full origin (`"https://acme.loookin.com"`) |
 | `key` | `string` | required | Publishable key, `pub_...` |
 | `anonymous` | `boolean` | `false` | Measure visitors before `identify`, see below |
+| `autoTrack` | `{ pageViews?: boolean; campaigns?: boolean }` | both `false` | Events the SDK sends on its own, see below |
 | `appVersion` | `string` | none | Sent with every event as `context.app_version` |
 | `session` | `string` | none | Sent with every event as `context.session` |
 | `debug` | `boolean` | `false` | Log what is sent and what the server answered |
@@ -110,6 +110,31 @@ Please note:
 Without `anonymous: true` the SDK never reads or writes `localStorage`,
 `sessionStorage` or cookies.
 
+## Auto-tracking
+
+Off by default. Turn on what you want in `init`:
+
+```js
+loookin.init({
+  workspace: "acme",
+  key: "pub_...",
+  autoTrack: { pageViews: true, campaigns: true },
+});
+```
+
+| Option | Event | Properties | When |
+|---|---|---|---|
+| `pageViews` | `page_viewed` | `page` (the path), `referrer` (on the first view, when there is one) | On `init`, and whenever the path changes without a page load (`history.pushState`, `history.replaceState`, back and forward) |
+| `campaigns` | `campaign_arrived` | `utm_source`, `utm_medium`, `utm_campaign` (those present in the address), `landing_page` (the path) | Once per page load, when the address has at least one of the three parameters |
+
+These events go through the same queue as your own. They need a user like any
+other event: without anonymous mode they wait for `identify`. They also count
+toward your workspace's event quota.
+
+Only the path is sent as `page` and `landing_page`, never the query string or
+the hash. With `pageViews` on, the SDK wraps `history.pushState` and
+`history.replaceState`; with it off, it does not touch them.
+
 ## Debug and dry run
 
 ```js
@@ -125,10 +150,10 @@ prints nothing.
 Combine it with `debug` to see what would be accepted while you wire things up,
 without filling your workspace with test data.
 
-If nothing arrives and debug shows requests failing, check that the origin of
-your page (scheme, host and port) is on the key's list of allowed origins. A
-browser hides the server's answer from a page whose origin is not allowed, so
-the SDK can only report it as a failed request.
+If the server refuses the origin of your page or the key itself, the SDK says
+so once under `debug` and stops sending until the next page load. To fix a
+refused origin, add the origin of your page (scheme, host and port) to the
+key's list of allowed origins.
 
 One message is printed even without `debug`: an error when a server key
 (`ins_...`) is passed to `init`. Server keys must never ship to a browser. The
@@ -137,12 +162,52 @@ SDK refuses them and sends nothing.
 ## What the SDK does not do
 
 - It does not collect anything on its own: no clicks, form contents, page
-  content or browser fingerprints.
+  content or browser fingerprints. Page views and campaign arrivals are sent
+  only if you turn them on.
 - It does not use cookies, and it does not use browser storage unless you turn
   on anonymous mode.
 - It does not read data back from your workspace.
 - It does not persist the queue or sync between tabs.
 - It does not link an anonymous visitor's history to the user they sign in as.
+
+## From your server
+
+Events that happen on your backend (an order, a webhook, an import) are sent
+with a server key (`ins_...`) from Node.js 22 or newer. A server has no current
+user, so every event names its `company`, its `user`, or both.
+
+```js
+import { createClient } from "@loookin/sdk/node";
+
+const loookin = createClient({ workspace: "acme", key: process.env.LOOOKIN_KEY });
+
+const result = loookin.track({
+  event: "order_placed",
+  company: "company_193",
+  user: "user_8421",
+  properties: { total: 129.5, currency: "EUR" },
+  context: { source: "api" },
+});
+if (!result.ok) console.warn(result.error);
+
+// Before the process exits (scripts, serverless functions):
+await loookin.shutdown();
+```
+
+| Call | What it does |
+|---|---|
+| `createClient({ workspace, key, debug?, dryRun? })` | Creates a client. You can create as many as you need. |
+| `client.track({ event, company?, user?, properties?, timestamp?, context? })` | Queues an event and returns `{ ok: true }`, or `{ ok: false, error }` when the event cannot be sent as given. Never throws. |
+| `client.flush()` | Sends the queue now. Resolves after the attempt. |
+| `client.shutdown()` | Sends what is queued, waits for it and stops the client. |
+
+`timestamp` is an ISO 8601 string or a `Date`; it defaults to now. `context`
+may carry `source`, `session`, `device_type`, `app_version` and `os`;
+`platform` is always `"server"`. Batching, retries and `debug` / `dryRun` work
+as in the browser. The flush timer does not keep your process alive, so call
+`shutdown()` (or `flush()`) before exiting, otherwise queued events are lost.
+
+Keep server keys on the server. Never put one into code that ships to a browser.
 
 ## Server-side rendering
 
@@ -162,6 +227,24 @@ npm test
 npm run build
 npm run size   # fails if the gzipped browser entry is over 5 kB
 ```
+
+A page for trying the browser entry by hand is in `examples/browser/index.html`
+(build first, then serve the repository root over http). A script for the
+server entry is in `examples/node/send.mjs`.
+
+## Releasing
+
+For maintainers. Releases are published to npm by the `Release` workflow when a
+version tag is pushed. It uses npm trusted publishing, so there is no token to
+manage.
+
+1. Update `version` in `package.json` (and `package-lock.json`, for example
+   with `npm version 0.2.0 --no-git-tag-version`) in a pull request and merge it.
+2. Tag the merged commit: `git tag v0.2.0`. The tag must match the version in
+   `package.json`, otherwise the workflow stops before publishing.
+3. Push the tag: `git push origin v0.2.0`.
+
+A change that breaks existing calls needs a new major version.
 
 ## License
 

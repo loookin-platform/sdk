@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, vi } from "vitest";
 
 let visibility: DocumentVisibilityState = "visible";
-let listeners: [string, EventListenerOrEventListenerObject][] = [];
+let listeners: [EventTarget, string, EventListenerOrEventListenerObject][] = [];
+const { pushState, replaceState } = history;
 
 /** Loads a fresh copy of the SDK, as a new page load would. */
 export async function loadSdk() {
@@ -11,6 +12,17 @@ export async function loadSdk() {
 
 export function hidePage() {
   visibility = "hidden";
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+export function leavePage() {
+  window.dispatchEvent(new Event("pagehide"));
+}
+
+/** The page comes back, for example from the back/forward cache. */
+export function showPage() {
+  visibility = "visible";
+  window.dispatchEvent(new Event("pageshow"));
   document.dispatchEvent(new Event("visibilitychange"));
 }
 
@@ -28,16 +40,21 @@ export function setupPage() {
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
     setWidth(1280);
     // Remember listeners so that one test's SDK copy cannot act in the next.
-    const add = document.addEventListener.bind(document);
-    vi.spyOn(document, "addEventListener").mockImplementation((type: string, listener: any, opts?: any) => {
-      listeners.push([type, listener]);
-      add(type, listener, opts);
-    });
+    for (const target of [document, window]) {
+      const add = target.addEventListener.bind(target);
+      vi.spyOn(target, "addEventListener").mockImplementation((type: string, listener: any, opts?: any) => {
+        listeners.push([target, type, listener]);
+        add(type, listener, opts);
+      });
+    }
   });
 
   afterEach(() => {
-    for (const [type, listener] of listeners) document.removeEventListener(type, listener);
+    for (const [target, type, listener] of listeners) target.removeEventListener(type, listener);
     listeners = [];
+    history.pushState = pushState;
+    history.replaceState = replaceState;
+    pushState.call(history, null, "", "/");
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();

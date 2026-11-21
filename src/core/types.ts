@@ -9,6 +9,8 @@ export interface InitOptions {
   key: string;
   /** Use a random device id stored in localStorage as the user until identify(). */
   anonymous?: boolean;
+  /** Events the SDK sends on its own. Both are off unless turned on here. */
+  autoTrack?: { pageViews?: boolean; campaigns?: boolean };
   /** Sent as context.app_version. */
   appVersion?: string;
   /** Sent as context.session. */
@@ -28,6 +30,9 @@ export interface EventContext {
   device_type?: "desktop" | "mobile" | "tablet";
   app_version?: string;
   session?: string;
+  /** Who triggered the action, for example "user", "api", "ai" or "system". */
+  source?: string;
+  os?: string;
 }
 
 /** One event as it travels to the server. */

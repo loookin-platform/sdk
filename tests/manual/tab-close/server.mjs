@@ -8,11 +8,19 @@ export const PAGE_ORIGIN = "http://localhost:4100";
 export const INGEST_ORIGIN = "http://localhost:4101";
 /** Fewer than the SDK's flush threshold (30), so every event stays queued. */
 export const QUEUED = 20;
+/** How long the "inflight" case keeps its first request unanswered. */
+const SLOW_MS = 4000;
+
+/** The case is the second part of a run name: tabclose_<case>_... */
+const caseOf = (name) => name.split("_")[1];
 
 const SDK_FILE = fileURLToPath(new URL("../../../dist/browser.js", import.meta.url));
 
 // The page tracks QUEUED events named after `?e=` as soon as it loads and
 // reports its own lifecycle, so a run can tell a closed tab from an open one.
+// The name carries the case (see caseOf): "backoff" has the whole queue
+// refused once, so it waits for a retry; "inflight" has the first half on its
+// way, unanswered, with the second half queued behind it.
 const PAGE = `<!doctype html>
 <meta charset="utf-8" />
 <title>@loookin/sdk tab close test</title>
@@ -27,7 +35,18 @@ const PAGE = `<!doctype html>
   window.addEventListener("pagehide", () => signal("hidden"));
   loookin.init({ workspace: "${INGEST_ORIGIN}", key: "pub_test" });
   loookin.identify("user-1", { company: "company-1" });
-  for (let i = 0; i < ${QUEUED}; i++) loookin.track(name, { position: i });
+  const mode = name.split("_")[1];
+  const track = (from, to) => {
+    for (let i = from; i < to; i++) loookin.track(name, { position: i });
+  };
+  if (mode === "inflight") {
+    track(0, ${QUEUED} / 2);
+    void loookin.flush();
+    track(${QUEUED} / 2, ${QUEUED});
+  } else {
+    track(0, ${QUEUED});
+    if (mode === "backoff") await loookin.flush();
+  }
   signal("ready");
 </script>`;
 
@@ -55,7 +74,7 @@ export function startServers() {
 
   const runs = new Map();
   const run = (name) => {
-    if (!runs.has(name)) runs.set(name, { ids: new Set(), firstBatchAt: undefined, readyAt: undefined, hidden: false });
+    if (!runs.has(name)) runs.set(name, { ids: new Set(), batches: 0, firstBatchAt: undefined, readyAt: undefined, hidden: false });
     return runs.get(name);
   };
 
@@ -78,6 +97,7 @@ export function startServers() {
     req.on("end", () => {
       const url = new URL(req.url, INGEST_ORIGIN);
       let accepted = 0;
+      let delay = 0;
       if (url.pathname === "/signal") {
         const state = run(url.searchParams.get("e"));
         if (url.searchParams.get("s") === "ready") state.readyAt ??= Date.now();
@@ -89,15 +109,25 @@ export function startServers() {
         } catch {
           // A broken body counts as nothing received.
         }
+        const name = events[0]?.event ?? "";
+        const first = run(name).batches++ === 0;
+        if (first && caseOf(name) === "backoff") {
+          // Refused and not counted: the SDK holds the batch for its retry.
+          res.writeHead(503, { ...cors(req), "Retry-After": "30", "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ error: "unavailable" }));
+        }
         for (const event of events) {
           const state = run(event.event);
           state.firstBatchAt ??= Date.now();
           state.ids.add(event.eventId);
         }
         accepted = events.length;
+        if (first && caseOf(name) === "inflight") delay = SLOW_MS;
       }
-      res.writeHead(202, { ...cors(req), "Content-Type": "application/json" });
-      res.end(JSON.stringify({ data: { accepted, errors: [], throttled: [] } }));
+      setTimeout(() => {
+        res.writeHead(202, { ...cors(req), "Content-Type": "application/json" });
+        res.end(JSON.stringify({ data: { accepted, errors: [], throttled: [] } }));
+      }, delay);
     });
   });
 

@@ -9,6 +9,14 @@ away. Twenty is on purpose: at 30 the SDK sends the queue at once and nothing
 would be left to measure. A local server on another origin stands in for the
 ingest and counts what arrives. At least 95 % must arrive.
 
+Two harder cases are measured as well, each by closing the tab and by
+navigating away:
+
+- `backoff`: the server refuses the first request with a 503 and a long
+  `Retry-After`, so all 20 events wait for a retry when the page goes away.
+- `inflight`: the first 10 events are on their way and the server takes four
+  seconds to answer; the other 10 are queued behind that request.
+
 Nothing leaves your machine and no workspace or key is needed.
 
 ## Chromium, Chrome, Firefox, WebKit
@@ -22,7 +30,8 @@ npm run test:tabclose
 ```
 
 Each browser is tried three ways: the tab is closed, the tab is killed without
-asking the page, and the tab navigates to another address. The installed Google
+asking the page, and the tab navigates to another address. A second argument
+runs one case only, for example `npm run test:tabclose -- 5 backoff`. The installed Google
 Chrome is included when there is one.
 
 WebKit is only measured for navigating away. Playwright's WebKit destroys a

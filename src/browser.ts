@@ -109,10 +109,11 @@ function init(opts: InitOptions) {
 
   // Safari does not always fire visibilitychange when a page is closed, so
   // pagehide is watched too. A second flush finds nothing left to send.
+  // The flush is forced: the page may be gone before a retry time comes.
   const onHide = () => {
     const waiting = queue.items.filter((item) => !item.event.user).length;
     if (waiting) log(`${waiting} event(s) are waiting for identify() and are lost if the page closes now`);
-    void queue.flush();
+    void queue.flush(true);
   };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") onHide();
@@ -163,12 +164,11 @@ function reset() {
 function stop() {
   if (!hasDom()) return;
   user = company = undefined;
-  if (options?.anonymous) {
-    try {
-      localStorage.removeItem(DEVICE_KEY);
-    } catch {
-      // storage is blocked: there was nothing to remove
-    }
+  // Also before init() and without anonymous mode: an earlier visit may have stored the id.
+  try {
+    localStorage.removeItem(DEVICE_KEY);
+  } catch {
+    // storage is blocked: there was nothing to remove
   }
   queue.disable("stop() was called. Nothing more will be sent until the page reloads.");
 }
@@ -191,8 +191,8 @@ export const loookin = {
   identify: guard(identify),
   /** Queues an event. Never throws. */
   track: guard(track),
-  /** Sends the queue now. Resolves after the attempt; never rejects. */
-  flush: (): Promise<void> => (hasDom() ? queue.flush() : Promise.resolve()),
+  /** Sends the queue now, also a batch that was waiting for its retry. Resolves after the attempt; never rejects. */
+  flush: (): Promise<void> => (hasDom() ? queue.flush(true) : Promise.resolve()),
   /** Forgets the identity. In anonymous mode a new device id is created. */
   reset: guard(reset),
   /** Drops the queue and stops sending until the page reloads, for example when a user opts out. */

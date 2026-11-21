@@ -1,11 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { send } from "../src/core/transport";
-import { accepted, failure, json, mockFetch } from "./helpers";
+import { accepted, failure, json, mockFetch, silentServer } from "./helpers";
 
 const URL = "https://acme.loookin.com/api/events";
 const BODY = '{"events":[]}';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("send", () => {
   it("posts the body with the key and without cookies", async () => {
@@ -16,6 +20,7 @@ describe("send", () => {
       method: "POST",
       keepalive: true,
       credentials: "omit",
+      redirect: "error", // the key never follows a redirect
       headers: { Authorization: "Bearer pub_abc", "Content-Type": "application/json" },
       body: BODY,
     });
@@ -70,5 +75,37 @@ describe("send", () => {
   ])("drops the batch on %i %s", async (status, error) => {
     mockFetch(() => failure(status, error));
     expect(await send(URL, "pub_abc", BODY, false)).toEqual({ kind: "drop", status, error });
+  });
+
+  it("caps an absurd Retry-After at one hour", async () => {
+    mockFetch(() => failure(429, "rate_limited", { "Retry-After": "999999" }));
+    expect(await send(URL, "pub_abc", BODY, false)).toEqual({ kind: "retry", status: 429, retryAfter: 3600 });
+  });
+
+  it.each([
+    ["a login page", () => new Response("<html>Sign in</html>", { status: 200, headers: { "Content-Type": "text/html" } })],
+    ["an empty body", () => new Response(null, { status: 204 })],
+    ["JSON without data", () => json(200, { ok: true })],
+    ["data of another shape", () => json(200, { data: { user: "someone" } })],
+    ["a dry run without the preview", () => json(200, { data: { dryRun: true, would: null } })],
+  ])("asks for a retry when a 2xx answer is %s", async (_, answer) => {
+    mockFetch(answer);
+    expect(await send(URL, "pub_abc", BODY, false)).toMatchObject({ kind: "retry" });
+  });
+
+  describe("a server that never answers", () => {
+    beforeEach(() => void vi.useFakeTimers());
+
+    it("gives up after 15 s and asks for a retry", async () => {
+      const timeouts = silentServer();
+      const result = send(URL, "pub_abc", BODY, false);
+      let settled = false;
+      void result.then(() => (settled = true));
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toEqual({ kind: "retry", status: 0 });
+      expect(timeouts).toEqual([15_000]);
+    });
   });
 });

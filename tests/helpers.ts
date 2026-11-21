@@ -47,3 +47,32 @@ export function event(overrides: Partial<WireEvent> = {}): WireEvent {
     ...overrides,
   };
 }
+
+/** A request whose answer the test gives later, to keep it in flight. */
+export function gate() {
+  let open!: (res: Response) => void;
+  const answer = new Promise<Response>((resolve) => (open = resolve));
+  return { answer, open };
+}
+
+/**
+ * A server that accepts the request and never answers. Makes
+ * AbortSignal.timeout run on the fake clock; returns the timeouts asked for.
+ */
+export function silentServer(): number[] {
+  const timeouts: number[] = [];
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+    timeouts.push(ms);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("timed out", "TimeoutError")), ms);
+    return controller.signal;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(init.signal!.reason))),
+    ),
+  );
+  return timeouts;
+}

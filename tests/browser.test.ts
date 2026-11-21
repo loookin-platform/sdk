@@ -423,13 +423,64 @@ describe("stop()", () => {
     expect(localStorage.getItem("loookin_device")).toBeNull();
   });
 
-  it("does not touch storage when anonymous mode is off", async () => {
+  it("removes a device id from an earlier visit, also before init() and with anonymous mode off", async () => {
     mockFetch();
-    const remove = vi.spyOn(Storage.prototype, "removeItem");
-    const loookin = await loadSdk();
+    localStorage.setItem("loookin_device", "left-by-an-earlier-visit");
+    let loookin = await loadSdk();
+    loookin.stop(); // opt-out before init()
+    expect(localStorage.getItem("loookin_device")).toBeNull();
+
+    localStorage.setItem("loookin_device", "left-by-an-earlier-visit");
+    loookin = await loadSdk();
     loookin.init(options);
     loookin.stop();
-    expect(remove).not.toHaveBeenCalled();
-    remove.mockRestore();
+    expect(localStorage.getItem("loookin_device")).toBeNull();
+  });
+
+  it("does not throw when storage is unavailable", async () => {
+    mockFetch();
+    const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    const loookin = await loadSdk();
+    expect(() => loookin.stop()).not.toThrow();
+    expect(remove).toHaveBeenCalledWith("loookin_device");
+    loookin.init(options);
+    loookin.identify("u1");
+    loookin.track("after_stop");
+    await loookin.flush();
+    expect(fetch).not.toHaveBeenCalled(); // stop() still took effect
+  });
+});
+
+describe("while the server is failing", () => {
+  it("sends the waiting batch and the queue at once when the page is hidden", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? failure(503, "unavailable") : accepted()));
+    const loookin = await loadSdk();
+    loookin.init(options);
+    loookin.identify("u1");
+    loookin.track("draft_saved");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(1); // failed: the next attempt is a second away
+    loookin.track("draft_closed");
+
+    hidePage();
+    leavePage();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.slice(1).flatMap((c) => c.events).map((e) => e.event)).toEqual(["draft_saved", "draft_closed"]);
+    for (const call of calls.slice(1)) expect(call.init.keepalive).toBe(true);
+  });
+
+  it("flush() sends the waiting batch now", async () => {
+    const calls = mockFetch((_, n) => (n === 1 ? failure(503, "unavailable") : accepted()));
+    const loookin = await loadSdk();
+    loookin.init(options);
+    loookin.identify("u1");
+    loookin.track("draft_saved");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(1);
+    await loookin.flush();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.body).toBe(calls[0]!.body);
   });
 });

@@ -32,6 +32,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:tabclose": "npm run build && node tests/manual/tab-close/engines.mjs",
+    "test:tabclose:safari": "npm run build && node tests/manual/tab-close/safari.mjs",
     "build": "tsup",
     "size": "node scripts/size.mjs",
     "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run size"
@@ -39,6 +41,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "jsdom": "^31.0.1",
+    "playwright": "^1.56.1",
     "tsup": "^9.0.0",
     "typescript": "^6.0.3",
     "vitest": "^5.1.1"

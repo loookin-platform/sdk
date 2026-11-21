@@ -55,6 +55,20 @@ describe("page views", () => {
     expect(await sent(loookin, calls)).toEqual([["page_viewed", { page: "/pricing", referrer: "https://search.example/" }]]);
   });
 
+  it("sends the referrer with the first view only, not with in-app navigations", async () => {
+    open("/pricing");
+    setReferrer("https://search.example/");
+    const calls = mockFetch();
+    const loookin = await loadSdk();
+    loookin.init({ ...options, autoTrack: { pageViews: true } });
+    loookin.identify("u1");
+    history.pushState({}, "", "/docs");
+    expect(await sent(loookin, calls)).toEqual([
+      ["page_viewed", { page: "/pricing", referrer: "https://search.example/" }],
+      ["page_viewed", { page: "/docs" }],
+    ]);
+  });
+
   it("leaves the referrer out when there is none", async () => {
     open("/pricing");
     const calls = mockFetch();

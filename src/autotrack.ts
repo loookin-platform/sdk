@@ -31,8 +31,10 @@ export function startAutoTrack(options: AutoTrackOptions, track: (event: string,
   const pageViewed = () => {
     const page = location.pathname;
     if (page === last) return;
+    // The referrer describes how the visitor arrived, so it goes with the first view only.
+    const referrer = last === undefined ? document.referrer : "";
     last = page;
-    track("page_viewed", document.referrer ? { page, referrer: document.referrer } : { page });
+    track("page_viewed", referrer ? { page, referrer } : { page });
   };
 
   for (const method of ["pushState", "replaceState"] as const) {

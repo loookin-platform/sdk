@@ -124,7 +124,7 @@ loookin.init({
 
 | Option | Event | Properties | When |
 |---|---|---|---|
-| `pageViews` | `page_viewed` | `page` (the path), `referrer` (when there is one) | On `init`, and whenever the path changes without a page load (`history.pushState`, `history.replaceState`, back and forward) |
+| `pageViews` | `page_viewed` | `page` (the path), `referrer` (on the first view, when there is one) | On `init`, and whenever the path changes without a page load (`history.pushState`, `history.replaceState`, back and forward) |
 | `campaigns` | `campaign_arrived` | `utm_source`, `utm_medium`, `utm_campaign` (those present in the address), `landing_page` (the path) | Once per page load, when the address has at least one of the three parameters |
 
 These events go through the same queue as your own. They need a user like any

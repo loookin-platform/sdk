@@ -61,3 +61,6 @@ Closing a whole window, quitting the browser and mobile browsers.
 | Date | Version | Chromium | Chrome | Firefox | Safari |
 |---|---|---|---|---|---|
 | 2026-11-21 | 0.1.1 | 300/300 | 300/300 | 300/300 | 80/80 (4 rounds counted) |
+| 2026-11-21 | 0.1.2 | 600/600 | 600/600 | 600/600 | not run |
+
+From 0.1.2 the numbers for Chromium, Chrome and Firefox cover all three cases (queue 300, backoff 200, inflight 100). On 0.1.1 the `backoff` and `inflight` cases delivered nothing: a page that went away while a batch waited for its retry, or while a request was in flight, lost the queued events.

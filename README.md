@@ -199,7 +199,8 @@ How it works:
   the promise resolves to `false`. It also resolves to `false` for a Popup,
   Modal or Banner while another of them is open, for a Tooltip whose anchor
   is not on the page, for an Embed, before `init` and `identify`, and with
-  `surveys: false`.
+  `surveys: false`. It resolves to `false` when that survey (or another one)
+  is already on screen, which is not an error.
 - Answers and the run (shown, started, steps, closed) are sent to
   `/api/sdk/surveys/{key}/events` and `/api/sdk/surveys/{key}/responses` of
   your workspace. Requests time out after 5 seconds and are never retried. If
@@ -384,8 +385,9 @@ SDK refuses them and sends nothing.
 ## From your server
 
 Events that happen on your backend (an order, a webhook, an import) are sent
-with a server key (`ins_...`) from Node.js 22 or newer. A server has no current
-user, so every event names its `company`, its `user`, or both.
+with a server key (`ins_...`). The Node client (`@loookin/sdk/node`) needs
+Node.js 22 or newer. A server has no current user, so every event names its
+`company`, its `user`, or both.
 
 ```js
 import { createClient } from "@loookin/sdk/node";
@@ -425,6 +427,11 @@ Keep server keys on the server. Never put one into code that ships to a browser.
 Importing the package where `window` does not exist is safe, and so is
 importing `@loookin/sdk/surveys`. All calls are no-ops there (`showSurvey`
 resolves to `false`), so you can call `track` from code that also runs on the server.
+
+## Module format
+
+The package is ESM only. In TypeScript, the `@loookin/sdk/surveys` subpath
+needs `moduleResolution` set to `bundler`, `node16` or `nodenext`.
 
 ## Requirements
 

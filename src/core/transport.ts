@@ -14,29 +14,37 @@ export function waitSeconds(value: unknown): number | undefined {
 }
 
 /**
+ * One POST with the key. Never throws: a network error, a refused redirect
+ * and a timeout (also while reading the body) resolve to `undefined`; a body
+ * that is not JSON is `null`. Shared by events and surveys.
+ */
+export async function post(url: string, key: string, body: string, keepalive: boolean, timeout = TIMEOUT_MS): Promise<{ res: Response; json: any } | undefined> {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      keepalive,
+      credentials: "omit",
+      // The key and the body must not follow a redirect, for example to a login page.
+      redirect: "error",
+      signal: AbortSignal.timeout?.(timeout),
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body,
+    });
+    return { res, json: await res.json().catch(() => null) };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Sends one batch and reduces the answer to what the queue has to do next.
  * Never throws: a failed request, one that timed out and a 2xx answer that
  * is not the ingest's own are `retry` results.
  */
 export async function send(url: string, key: string, body: string, keepalive: boolean): Promise<SendResult> {
-  let res: Response;
-  let json: any;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      keepalive,
-      credentials: "omit",
-      // The key and the events must not follow a redirect, for example to a login page.
-      redirect: "error",
-      signal: AbortSignal.timeout?.(TIMEOUT_MS),
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body,
-    });
-    json = await res.json().catch(() => null);
-  } catch {
-    return { kind: "retry", status: 0 };
-  }
-
+  const answer = await post(url, key, body, keepalive);
+  if (!answer) return { kind: "retry", status: 0 };
+  const { res, json } = answer;
   const status = res.status;
   if (res.ok) {
     // A dry run answers 200 with the preview under `data.would`.

@@ -1,0 +1,284 @@
+{
+  "name": "rating-branch-low",
+  "description": "NPS score in the low range goes into its branch and returns to the main line.",
+  "generatedFrom": "loookin lib/surveys/walk.ts and lib/surveys/flow.ts",
+  "steps": [
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_welcome",
+      "title": "Welcome",
+      "type": "message",
+      "required": false
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_nps",
+      "title": "How likely are you to recommend us?",
+      "type": "rating",
+      "required": true,
+      "scale": "nps",
+      "lowLabel": "Low",
+      "highLabel": "High",
+      "branches": [
+        {
+          "key": "b_low",
+          "label": "Detractors",
+          "min": 0,
+          "max": 6,
+          "steps": [
+            {
+              "description": "",
+              "button": "Next",
+              "locked": false,
+              "saveToRecord": false,
+              "saveToMetrics": false,
+              "key": "s_why",
+              "title": "What went wrong?",
+              "type": "text",
+              "required": true,
+              "long": false,
+              "placeholder": ""
+            }
+          ]
+        },
+        {
+          "key": "b_high",
+          "label": "Promoters",
+          "min": 9,
+          "max": 10,
+          "steps": [
+            {
+              "description": "",
+              "button": "Next",
+              "locked": false,
+              "saveToRecord": false,
+              "saveToMetrics": false,
+              "key": "s_love",
+              "title": "What do you like most?",
+              "type": "text",
+              "required": false,
+              "long": false,
+              "placeholder": ""
+            },
+            {
+              "description": "",
+              "button": "Next",
+              "locked": false,
+              "saveToRecord": false,
+              "saveToMetrics": false,
+              "key": "s_love_note",
+              "title": "Great to hear",
+              "type": "message",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_more",
+      "title": "Anything else?",
+      "type": "text",
+      "required": false,
+      "long": false,
+      "placeholder": ""
+    },
+    {
+      "description": "",
+      "button": "",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_thanks",
+      "title": "Thank you",
+      "type": "thanks",
+      "required": false
+    }
+  ],
+  "actions": [
+    "next",
+    {
+      "answer": 3
+    },
+    "next",
+    {
+      "answer": "Too slow"
+    },
+    "next",
+    {
+      "answer": "No"
+    },
+    "next"
+  ],
+  "expected": {
+    "trace": [
+      {
+        "action": "start",
+        "step": "s_welcome",
+        "progress": [
+          0,
+          5
+        ],
+        "canBack": false,
+        "answers": []
+      },
+      {
+        "action": "next",
+        "step": "s_nps",
+        "progress": [
+          1,
+          5
+        ],
+        "canBack": true,
+        "answers": []
+      },
+      {
+        "action": {
+          "answer": 3
+        },
+        "step": "s_nps",
+        "progress": [
+          1,
+          5
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_nps",
+            "score": 3
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "step": "s_why",
+        "progress": [
+          2,
+          5
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_nps",
+            "score": 3
+          }
+        ]
+      },
+      {
+        "action": {
+          "answer": "Too slow"
+        },
+        "step": "s_why",
+        "progress": [
+          2,
+          5
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_nps",
+            "score": 3
+          },
+          {
+            "stepKey": "s_why",
+            "text": "Too slow"
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "step": "s_more",
+        "progress": [
+          4,
+          5
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_nps",
+            "score": 3
+          },
+          {
+            "stepKey": "s_why",
+            "text": "Too slow"
+          }
+        ]
+      },
+      {
+        "action": {
+          "answer": "No"
+        },
+        "step": "s_more",
+        "progress": [
+          4,
+          5
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_nps",
+            "score": 3
+          },
+          {
+            "stepKey": "s_why",
+            "text": "Too slow"
+          },
+          {
+            "stepKey": "s_more",
+            "text": "No"
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "end": {
+          "thanks": "s_thanks"
+        },
+        "answers": [
+          {
+            "stepKey": "s_nps",
+            "score": 3
+          },
+          {
+            "stepKey": "s_why",
+            "text": "Too slow"
+          },
+          {
+            "stepKey": "s_more",
+            "text": "No"
+          }
+        ]
+      }
+    ],
+    "end": {
+      "thanks": "s_thanks"
+    },
+    "answers": [
+      {
+        "stepKey": "s_nps",
+        "score": 3
+      },
+      {
+        "stepKey": "s_why",
+        "text": "Too slow"
+      },
+      {
+        "stepKey": "s_more",
+        "text": "No"
+      }
+    ]
+  }
+}

@@ -1,0 +1,192 @@
+{
+  "name": "branch-own-thanks",
+  "description": "A branch that ends with its own thank you ends the flow there; the other path uses the main thank you.",
+  "generatedFrom": "loookin lib/surveys/walk.ts and lib/surveys/flow.ts",
+  "steps": [
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_csat",
+      "title": "How satisfied are you?",
+      "type": "rating",
+      "required": true,
+      "scale": "emoji",
+      "lowLabel": "Low",
+      "highLabel": "High",
+      "branches": [
+        {
+          "key": "b_unhappy",
+          "label": "Unhappy",
+          "min": 1,
+          "max": 2,
+          "steps": [
+            {
+              "description": "",
+              "button": "Next",
+              "locked": false,
+              "saveToRecord": false,
+              "saveToMetrics": false,
+              "key": "s_fix",
+              "title": "What should we fix?",
+              "type": "text",
+              "required": false,
+              "long": false,
+              "placeholder": ""
+            },
+            {
+              "description": "",
+              "button": "",
+              "locked": false,
+              "saveToRecord": false,
+              "saveToMetrics": false,
+              "key": "s_sorry",
+              "title": "Sorry to hear that",
+              "type": "thanks",
+              "required": false
+            }
+          ]
+        },
+        {
+          "key": "b_happy",
+          "label": "Happy",
+          "min": 4,
+          "max": 5,
+          "steps": []
+        }
+      ]
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_extra",
+      "title": "Anything else?",
+      "type": "text",
+      "required": false,
+      "long": false,
+      "placeholder": ""
+    },
+    {
+      "description": "",
+      "button": "",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_main_thanks",
+      "title": "Thank you",
+      "type": "thanks",
+      "required": false
+    }
+  ],
+  "actions": [
+    {
+      "answer": 1
+    },
+    "next",
+    {
+      "answer": "Onboarding"
+    },
+    "next"
+  ],
+  "expected": {
+    "trace": [
+      {
+        "action": "start",
+        "step": "s_csat",
+        "progress": [
+          0,
+          3
+        ],
+        "canBack": false,
+        "answers": []
+      },
+      {
+        "action": {
+          "answer": 1
+        },
+        "step": "s_csat",
+        "progress": [
+          0,
+          3
+        ],
+        "canBack": false,
+        "answers": [
+          {
+            "stepKey": "s_csat",
+            "score": 1
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "step": "s_fix",
+        "progress": [
+          1,
+          3
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_csat",
+            "score": 1
+          }
+        ]
+      },
+      {
+        "action": {
+          "answer": "Onboarding"
+        },
+        "step": "s_fix",
+        "progress": [
+          1,
+          3
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_csat",
+            "score": 1
+          },
+          {
+            "stepKey": "s_fix",
+            "text": "Onboarding"
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "end": {
+          "thanks": "s_sorry"
+        },
+        "answers": [
+          {
+            "stepKey": "s_csat",
+            "score": 1
+          },
+          {
+            "stepKey": "s_fix",
+            "text": "Onboarding"
+          }
+        ]
+      }
+    ],
+    "end": {
+      "thanks": "s_sorry"
+    },
+    "answers": [
+      {
+        "stepKey": "s_csat",
+        "score": 1
+      },
+      {
+        "stepKey": "s_fix",
+        "text": "Onboarding"
+      }
+    ]
+  }
+}

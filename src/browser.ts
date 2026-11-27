@@ -3,10 +3,15 @@ import { createLogger, silent, type Logger } from "./core/debug";
 import { createQueue } from "./core/queue";
 import { cleanId, resolveOrigin } from "./core/types";
 import type { EventContext, IdentifyOptions, InitOptions, Properties, WireEvent } from "./core/types";
+import { navigatedAt, onNavigation } from "./core/address";
+import { post } from "./core/transport";
+import type { SdkSurvey, SurveyHost, SurveyIdentity, SurveysController } from "./surveys/types";
 
 export type { IdentifyOptions, InitOptions, Properties, PropertyValue } from "./core/types";
 
 const DEVICE_KEY = "loookin_device";
+/** Anonymous mode only: which surveys this device has seen (written by the surveys entry). */
+const SURVEYS_KEY = "loookin_surveys";
 
 const queue = createQueue();
 let options: InitOptions | undefined;
@@ -18,6 +23,25 @@ let extra: Partial<EventContext> = {};
 let warnedServerKey = false;
 /** True between pagehide and pageshow: the page may be gone any moment. */
 let leaving = false;
+
+// Surveys. The core only asks which surveys apply and loads the renderer
+// (`./surveys.js`) when the answer is not empty; the renderer decides what
+// it can show.
+/** Set by init() unless `surveys: false`; unset by stop(). */
+let surveyHost: SurveyHost | undefined;
+let language: string | undefined;
+/** identify() was called (not just the anonymous device id). */
+let identified = false;
+let identityKey: string | undefined;
+let list: { surveys: SdkSurvey[]; until: number } | undefined;
+let asking: Promise<SdkSurvey[]> | undefined;
+/** Bumped on every identity change: an answer for an earlier identity is dropped. */
+let generation = 0;
+let loading: Promise<SurveysController> | undefined;
+let surveys: SurveysController | undefined;
+/** Names passed to track() for the current identity, for `event` triggers. */
+const tracked = new Set<string>();
+const off: (() => void)[] = [];
 
 /** False during server-side rendering, where every call is a no-op. */
 const hasDom = () => typeof window !== "undefined" && typeof document !== "undefined";
@@ -72,7 +96,7 @@ function setIdentity(nextUser: string, nextCompany?: string) {
 
 function init(opts: InitOptions) {
   if (!hasDom() || queue.disabled) return;
-  if (options) return log("init() was already called, ignoring this call");
+  if (options) return log("init() was already called");
 
   const debug = createLogger(opts?.debug);
   const key = cleanId(opts?.key);
@@ -81,14 +105,14 @@ function init(opts: InitOptions) {
     if (!warnedServerKey) {
       warnedServerKey = true;
       console.error(
-        "[loookin] A server key (ins_...) must never be used in a browser. Nothing will be sent. Use a publishable key (pub_...) instead.",
+        "[loookin] Server keys (ins_...) must never be used in a browser; nothing is sent. Use a publishable key (pub_...).",
       );
     }
     return queue.disable();
   }
   const origin = resolveOrigin(opts?.workspace);
   if (!origin || !key) {
-    return debug("init() needs a workspace (slug or https origin) and a publishable key. Nothing will be sent.");
+    return debug("init() needs a workspace and a publishable key");
   }
 
   options = opts;
@@ -112,11 +136,16 @@ function init(opts: InitOptions) {
   // The flush is forced: the page may be gone before a retry time comes.
   const onHide = () => {
     const waiting = queue.items.filter((item) => !item.event.user).length;
-    if (waiting) log(`${waiting} event(s) are waiting for identify() and are lost if the page closes now`);
+    if (waiting) log(`${waiting} event(s) wait for identify(), lost if the page closes`);
     void queue.flush(true);
   };
+  // The tab coming back may find an old survey list; only then is it asked for again.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") onHide();
+    else if (surveyHost) {
+      void freshSurveys();
+      surveys?.check();
+    }
   });
   window.addEventListener("pagehide", () => {
     leaving = true;
@@ -127,13 +156,91 @@ function init(opts: InitOptions) {
   });
 
   if (opts.autoTrack) startAutoTrack(opts.autoTrack, guard(track));
+
+  const s = opts.surveys;
+  if (s !== false) {
+    const o = typeof s === "object" ? s : undefined;
+    language = cleanId(o?.language);
+    surveyHost = { origin, key, identity: surveyIdentity, fresh: freshSurveys, events: tracked, id: uuid, log, since: navigatedAt, webFonts: o?.webFonts === true };
+    void askSurveys();
+  }
 }
 
 function identify(id: string, opts?: IdentifyOptions) {
   if (!hasDom()) return;
   const nextUser = cleanId(id);
   if (!nextUser) return log("identify() needs a user id");
-  setIdentity(nextUser, cleanId(opts?.company));
+  const nextCompany = cleanId(opts?.company);
+  setIdentity(nextUser, nextCompany);
+  const key = `${nextUser}\n${nextCompany ?? ""}`;
+  if (key === identityKey) return;
+  // Events of the previous identity do not satisfy triggers of the next one.
+  if (identified) tracked.clear();
+  identified = true;
+  identityKey = key;
+  refreshSurveys();
+}
+
+/** Who the survey requests are for. Without identify() only in anonymous mode. */
+function surveyIdentity(): SurveyIdentity | undefined {
+  if (identified) return { user, company }; // an undefined company is left out of the JSON
+  return options?.anonymous ? { anonymous: true } : undefined;
+}
+
+/** Asks which surveys apply now. Never rejects (post() never does); a failure is an empty list. */
+function askSurveys(): Promise<SdkSurvey[]> {
+  const host = surveyHost;
+  const identity = surveyIdentity();
+  if (!host || !identity) return Promise.resolve([]);
+  const asked = generation;
+  const body = JSON.stringify({ identity, schema: 1, language });
+  return (asking ??= post(`${host.origin}/api/sdk/surveys`, host.key, body, false, 5000)
+    .then((answer) => {
+      if (asked !== generation) return [];
+      asking = undefined;
+      const data = answer?.res.ok ? answer.json?.data : undefined;
+      const got: SdkSurvey[] = Array.isArray(data?.surveys) ? data.surveys : [];
+      const mine = (list = { surveys: got, until: Date.now() + (data?.ttl > 0 ? data.ttl : 300) * 1000 });
+      // A late import must not apply a list that was replaced meanwhile.
+      if (got.length) loadSurveys().then((s) => list === mine && s.update(got), noop);
+      else surveys?.update([]);
+      return got;
+    }));
+}
+
+/** The list, asked again first when it is older than its ttl. */
+function freshSurveys(): Promise<SdkSurvey[]> {
+  return list && Date.now() < list.until ? Promise.resolve(list.surveys) : askSurveys();
+}
+
+function loadSurveys(): Promise<SurveysController> {
+  // A failed import is not tried again on this page.
+  return (loading ??= import("./surveys.js").then((m) => {
+    off.push(
+      onNavigation(() => {
+        void freshSurveys();
+        surveys?.address();
+      }),
+    );
+    return (surveys = m.startSurveys(surveyHost!));
+  }));
+}
+
+/** A new identity, or none: the open survey closes and the list is asked for again. */
+function refreshSurveys() {
+  generation++;
+  asking = list = undefined;
+  surveys?.close();
+  void askSurveys();
+}
+
+/** Async: whatever goes wrong is a promise of `false`, never a throw. */
+async function showSurvey(key: string): Promise<boolean> {
+  try {
+    return !!surveyHost && (await freshSurveys()).some((s) => s?.key === key) && (await (await loadSurveys()).show(key));
+  } catch {
+    return false;
+  }
 }
 
 function track(event: string, properties?: Properties) {
@@ -149,12 +256,20 @@ function track(event: string, properties?: Properties) {
   if (company) queued.company = company;
   if (properties && typeof properties === "object") queued.properties = { ...properties };
   queue.push(queued);
+  if (surveyHost) {
+    tracked.add(event);
+    surveys?.track(event);
+  }
 }
 
 function reset() {
   if (!hasDom()) return;
   user = company = undefined;
   if (options?.anonymous) user = deviceId(true);
+  identified = false;
+  identityKey = undefined;
+  tracked.clear();
+  refreshSurveys();
 }
 
 /**
@@ -167,11 +282,18 @@ function stop() {
   // Also before init() and without anonymous mode: an earlier visit may have stored the id.
   try {
     localStorage.removeItem(DEVICE_KEY);
+    localStorage.removeItem(SURVEYS_KEY);
   } catch {
     // storage is blocked: there was nothing to remove
   }
-  queue.disable("stop() was called. Nothing more will be sent until the page reloads.");
+  queue.disable("stop(): sending stops until the page reloads");
+  surveyHost = undefined;
+  refreshSurveys();
+  surveys?.stop();
+  for (const remove of off.splice(0)) remove();
 }
+
+const noop = () => {};
 
 /** Nothing the SDK does may throw into the host page. */
 function guard<A extends unknown[]>(fn: (...args: A) => void) {
@@ -197,4 +319,6 @@ export const loookin = {
   reset: guard(reset),
   /** Drops the queue and stops sending until the page reloads, for example when a user opts out. */
   stop: guard(stop),
+  /** Shows a survey by its key now, without its triggers. Resolves to whether it was shown; never rejects. */
+  showSurvey,
 };

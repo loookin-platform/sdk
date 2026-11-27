@@ -1,7 +1,7 @@
 {
   "name": "@loookin/sdk",
-  "version": "0.1.2",
-  "description": "Send product usage events to a Loookin workspace.",
+  "version": "0.2.0",
+  "description": "Send product usage events to a Loookin workspace and show its in-app surveys.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -19,6 +19,11 @@
       "types": "./dist/node.d.ts",
       "import": "./dist/node.js",
       "default": "./dist/node.js"
+    },
+    "./surveys": {
+      "types": "./dist/surveys.d.ts",
+      "import": "./dist/surveys.js",
+      "default": "./dist/surveys.js"
     }
   },
   "types": "./dist/browser.d.ts",

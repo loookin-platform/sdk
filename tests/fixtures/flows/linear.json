@@ -1,0 +1,265 @@
+{
+  "name": "linear",
+  "description": "Message, text, single choice, stars, thank you. No branches.",
+  "generatedFrom": "loookin lib/surveys/walk.ts and lib/surveys/flow.ts",
+  "steps": [
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_hello",
+      "title": "Hello",
+      "type": "message",
+      "required": false
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_name",
+      "title": "Your role?",
+      "type": "text",
+      "required": true,
+      "long": false,
+      "placeholder": ""
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_plan",
+      "title": "Which plan?",
+      "type": "choice",
+      "required": false,
+      "multiple": false,
+      "options": [
+        {
+          "key": "o_free",
+          "label": "O_FREE"
+        },
+        {
+          "key": "o_pro",
+          "label": "O_PRO"
+        }
+      ]
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_stars",
+      "title": "Rate us",
+      "type": "rating",
+      "required": true,
+      "scale": "stars",
+      "lowLabel": "Low",
+      "highLabel": "High"
+    },
+    {
+      "description": "",
+      "button": "",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_end",
+      "title": "Thank you",
+      "type": "thanks",
+      "required": false
+    }
+  ],
+  "actions": [
+    "next",
+    {
+      "answer": "  Developer  "
+    },
+    "next",
+    {
+      "answer": [
+        "o_pro"
+      ]
+    },
+    "next",
+    {
+      "answer": 4
+    },
+    "next"
+  ],
+  "expected": {
+    "trace": [
+      {
+        "action": "start",
+        "step": "s_hello",
+        "progress": [
+          0,
+          4
+        ],
+        "canBack": false,
+        "answers": []
+      },
+      {
+        "action": "next",
+        "step": "s_name",
+        "progress": [
+          1,
+          4
+        ],
+        "canBack": true,
+        "answers": []
+      },
+      {
+        "action": {
+          "answer": "  Developer  "
+        },
+        "step": "s_name",
+        "progress": [
+          1,
+          4
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_name",
+            "text": "Developer"
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "step": "s_plan",
+        "progress": [
+          2,
+          4
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_name",
+            "text": "Developer"
+          }
+        ]
+      },
+      {
+        "action": {
+          "answer": [
+            "o_pro"
+          ]
+        },
+        "step": "s_plan",
+        "progress": [
+          2,
+          4
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_name",
+            "text": "Developer"
+          },
+          {
+            "stepKey": "s_plan",
+            "optionKeys": [
+              "o_pro"
+            ]
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "step": "s_stars",
+        "progress": [
+          3,
+          4
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_name",
+            "text": "Developer"
+          },
+          {
+            "stepKey": "s_plan",
+            "optionKeys": [
+              "o_pro"
+            ]
+          }
+        ]
+      },
+      {
+        "action": {
+          "answer": 4
+        },
+        "step": "s_stars",
+        "progress": [
+          3,
+          4
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_name",
+            "text": "Developer"
+          },
+          {
+            "stepKey": "s_plan",
+            "optionKeys": [
+              "o_pro"
+            ]
+          },
+          {
+            "stepKey": "s_stars",
+            "score": 4
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "end": {
+          "thanks": "s_end"
+        },
+        "answers": [
+          {
+            "stepKey": "s_name",
+            "text": "Developer"
+          },
+          {
+            "stepKey": "s_plan",
+            "optionKeys": [
+              "o_pro"
+            ]
+          },
+          {
+            "stepKey": "s_stars",
+            "score": 4
+          }
+        ]
+      }
+    ],
+    "end": {
+      "thanks": "s_end"
+    },
+    "answers": [
+      {
+        "stepKey": "s_name",
+        "text": "Developer"
+      },
+      {
+        "stepKey": "s_plan",
+        "optionKeys": [
+          "o_pro"
+        ]
+      },
+      {
+        "stepKey": "s_stars",
+        "score": 4
+      }
+    ]
+  }
+}

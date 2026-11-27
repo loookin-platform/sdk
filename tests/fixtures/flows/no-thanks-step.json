@@ -1,0 +1,140 @@
+{
+  "name": "no-thanks-step",
+  "description": "A flow without a thank you step ends after its last step.",
+  "generatedFrom": "loookin lib/surveys/walk.ts and lib/surveys/flow.ts",
+  "steps": [
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_score",
+      "title": "Score",
+      "type": "rating",
+      "required": true,
+      "scale": "ten",
+      "lowLabel": "Low",
+      "highLabel": "High"
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_why",
+      "title": "Why?",
+      "type": "text",
+      "required": false,
+      "long": false,
+      "placeholder": ""
+    }
+  ],
+  "actions": [
+    {
+      "answer": 8
+    },
+    "next",
+    {
+      "answer": "Because"
+    },
+    "next"
+  ],
+  "expected": {
+    "trace": [
+      {
+        "action": "start",
+        "step": "s_score",
+        "progress": [
+          0,
+          2
+        ],
+        "canBack": false,
+        "answers": []
+      },
+      {
+        "action": {
+          "answer": 8
+        },
+        "step": "s_score",
+        "progress": [
+          0,
+          2
+        ],
+        "canBack": false,
+        "answers": [
+          {
+            "stepKey": "s_score",
+            "score": 8
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "step": "s_why",
+        "progress": [
+          1,
+          2
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_score",
+            "score": 8
+          }
+        ]
+      },
+      {
+        "action": {
+          "answer": "Because"
+        },
+        "step": "s_why",
+        "progress": [
+          1,
+          2
+        ],
+        "canBack": true,
+        "answers": [
+          {
+            "stepKey": "s_score",
+            "score": 8
+          },
+          {
+            "stepKey": "s_why",
+            "text": "Because"
+          }
+        ]
+      },
+      {
+        "action": "next",
+        "end": {
+          "thanks": null
+        },
+        "answers": [
+          {
+            "stepKey": "s_score",
+            "score": 8
+          },
+          {
+            "stepKey": "s_why",
+            "text": "Because"
+          }
+        ]
+      }
+    ],
+    "end": {
+      "thanks": null
+    },
+    "answers": [
+      {
+        "stepKey": "s_score",
+        "score": 8
+      },
+      {
+        "stepKey": "s_why",
+        "text": "Because"
+      }
+    ]
+  }
+}

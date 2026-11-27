@@ -1,0 +1,171 @@
+{
+  "name": "optional-skipped",
+  "description": "Optional steps left empty: Next passes and the answers payload leaves them out.",
+  "generatedFrom": "loookin lib/surveys/walk.ts and lib/surveys/flow.ts",
+  "steps": [
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_a",
+      "title": "First?",
+      "type": "text",
+      "required": false,
+      "long": false,
+      "placeholder": ""
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_b",
+      "title": "Second?",
+      "type": "choice",
+      "required": false,
+      "multiple": false,
+      "options": [
+        {
+          "key": "o_x",
+          "label": "O_X"
+        },
+        {
+          "key": "o_y",
+          "label": "O_Y"
+        }
+      ]
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_c",
+      "title": "Third?",
+      "type": "text",
+      "required": false,
+      "long": true,
+      "placeholder": ""
+    },
+    {
+      "description": "",
+      "button": "Next",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_d",
+      "title": "Score",
+      "type": "rating",
+      "required": false,
+      "scale": "ten",
+      "lowLabel": "Low",
+      "highLabel": "High"
+    },
+    {
+      "description": "",
+      "button": "",
+      "locked": false,
+      "saveToRecord": false,
+      "saveToMetrics": false,
+      "key": "s_done",
+      "title": "Thank you",
+      "type": "thanks",
+      "required": false
+    }
+  ],
+  "actions": [
+    "next",
+    {
+      "answer": []
+    },
+    "next",
+    {
+      "answer": "   "
+    },
+    "next",
+    "next"
+  ],
+  "expected": {
+    "trace": [
+      {
+        "action": "start",
+        "step": "s_a",
+        "progress": [
+          0,
+          4
+        ],
+        "canBack": false,
+        "answers": []
+      },
+      {
+        "action": "next",
+        "step": "s_b",
+        "progress": [
+          1,
+          4
+        ],
+        "canBack": true,
+        "answers": []
+      },
+      {
+        "action": {
+          "answer": []
+        },
+        "step": "s_b",
+        "progress": [
+          1,
+          4
+        ],
+        "canBack": true,
+        "answers": []
+      },
+      {
+        "action": "next",
+        "step": "s_c",
+        "progress": [
+          2,
+          4
+        ],
+        "canBack": true,
+        "answers": []
+      },
+      {
+        "action": {
+          "answer": "   "
+        },
+        "step": "s_c",
+        "progress": [
+          2,
+          4
+        ],
+        "canBack": true,
+        "answers": []
+      },
+      {
+        "action": "next",
+        "step": "s_d",
+        "progress": [
+          3,
+          4
+        ],
+        "canBack": true,
+        "answers": []
+      },
+      {
+        "action": "next",
+        "end": {
+          "thanks": "s_done"
+        },
+        "answers": []
+      }
+    ],
+    "end": {
+      "thanks": "s_done"
+    },
+    "answers": []
+  }
+}

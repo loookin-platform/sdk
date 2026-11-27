@@ -19,6 +19,13 @@ export interface InitOptions {
   debug?: boolean;
   /** Let the server validate events without storing them. */
   dryRun?: boolean;
+  /**
+   * In-app surveys, on by default. `false`: the SDK never asks for surveys
+   * and draws nothing. `language`: the respondent's preferred language,
+   * sent along with the request for surveys. `webFonts`: load the web font a
+   * survey's Design names (off: the survey uses your page's font).
+   */
+  surveys?: boolean | { language?: string; webFonts?: boolean };
 }
 
 export interface IdentifyOptions {

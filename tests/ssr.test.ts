@@ -21,8 +21,15 @@ it("can be imported and called where window and document do not exist", async ()
     loookin.reset();
   }).not.toThrow();
   await expect(loookin.flush()).resolves.toBeUndefined();
+  await expect(loookin.showSurvey("nps")).resolves.toBe(false);
   await vi.advanceTimersByTimeAsync(60_000);
 
   expect(calls).toHaveLength(0);
   expect(vi.getTimerCount()).toBe(0); // nothing keeps a server process busy
+});
+
+it("can import the surveys entry where window and document do not exist", async () => {
+  expect(typeof window).toBe("undefined");
+  const entry = await import("../src/surveys");
+  expect(typeof entry.startSurveys).toBe("function");
 });

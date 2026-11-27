@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@loookin/sdk surveys manual test</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; }
+      fieldset { margin: 0 0 16px; padding: 12px 16px; border: 1px solid #ccc; border-radius: 8px; }
+      label { display: inline-block; margin: 4px 12px 4px 0; }
+      input[type="text"] { font: inherit; padding: 4px 8px; width: 220px; }
+      button { font: inherit; padding: 4px 12px; margin: 4px 8px 4px 0; }
+      pre { background: #111; color: #ddd; padding: 12px; border-radius: 8px; min-height: 120px; white-space: pre-wrap; word-break: break-word; }
+      code { background: #eee; padding: 0 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>@loookin/sdk surveys manual test</h1>
+    <!--
+      How to use:
+        npm run build
+        npx serve .        (or: python3 -m http.server 3000)
+      then open, for example:
+        http://localhost:3000/examples/browser/surveys.html?workspace=https://acme.loookin.com&key=pub_...
+      and add this page's origin to the allowed origins of the publishable key.
+      Nothing is stored in this file: the workspace origin and the key come from
+      the query parameters (or the fields below).
+    -->
+    <p>
+      Pass <code>?workspace=</code> (a slug or an origin, for a local server for example
+      <code>http://sandbox.localhost:3000</code>) and <code>?key=pub_...</code> in the address, or type them below.
+      Create a Popup or Modal survey with yourself in Test users to see it without publishing.
+    </p>
+
+    <fieldset>
+      <legend>1. Init and identify (once per page load, reload to change)</legend>
+      <label>Workspace <input type="text" id="workspace" placeholder="acme or https://acme.loookin.com" autocomplete="off" /></label>
+      <label>Key <input type="text" id="key" placeholder="pub_..." autocomplete="off" /></label><br />
+      <label>User <input type="text" id="user" value="example-user-1" /></label>
+      <label>Company <input type="text" id="company" value="example-company-1" /></label><br />
+      <button id="start">Init and identify</button>
+      <button id="reset">Reset</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>2. Triggers</legend>
+      <label>Event <input type="text" id="event" value="order_completed" /></label>
+      <button id="track">Track</button><br />
+      <button data-path="?page=orders">pushState ?page=orders</button>
+      <button data-path="#pricing">pushState #pricing</button>
+      <button id="example-cta">A button for a Click trigger (#example-cta)</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>3. Show by key</legend>
+      <label>Survey key <input type="text" id="survey" placeholder="the survey's key" autocomplete="off" /></label>
+      <button id="show">showSurvey</button>
+    </fieldset>
+
+    <pre id="log"></pre>
+
+    <script type="module">
+      import { loookin } from "../../dist/browser.js";
+
+      const $ = (id) => document.getElementById(id);
+      const query = new URLSearchParams(location.search);
+      $("workspace").value = query.get("workspace") ?? "";
+      $("key").value = query.get("key") ?? "";
+      $("survey").value = query.get("survey") ?? "";
+
+      const out = $("log");
+      const show = (...args) => {
+        out.textContent += args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") + "\n";
+      };
+      for (const method of ["log", "error"]) {
+        const original = console[method].bind(console);
+        console[method] = (...args) => {
+          original(...args);
+          show(...args);
+        };
+      }
+
+      $("start").onclick = () => {
+        loookin.init({ workspace: $("workspace").value, key: $("key").value, debug: true });
+        loookin.identify($("user").value, { company: $("company").value || undefined });
+        show("> init and identify", $("user").value);
+      };
+      $("reset").onclick = () => {
+        loookin.reset();
+        show("> reset");
+      };
+      $("track").onclick = () => {
+        loookin.track($("event").value);
+        show("> track", $("event").value);
+      };
+      for (const button of document.querySelectorAll("[data-path]")) {
+        button.onclick = () => {
+          history.pushState(null, "", button.dataset.path);
+          show("> pushState", location.pathname + location.search + location.hash);
+        };
+      }
+      $("show").onclick = async () => {
+        const shown = await loookin.showSurvey($("survey").value);
+        show("> showSurvey", $("survey").value, shown ? "shown" : "not shown");
+      };
+    </script>
+  </body>
+</html>

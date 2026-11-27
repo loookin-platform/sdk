@@ -1,3 +1,4 @@
+import { onNavigation } from "./core/address";
 import type { Properties } from "./core/types";
 
 export interface AutoTrackOptions {
@@ -47,19 +48,6 @@ export function startAutoTrack(options: AutoTrackOptions, track: (event: string,
     track("page_viewed", referrer ? { page, referrer } : { page });
   };
 
-  for (const method of ["pushState", "replaceState"] as const) {
-    const original = history[method];
-    history[method] = function (this: History, ...args: Parameters<History["pushState"]>) {
-      // If the original throws, the caller sees it exactly as before.
-      const result = original.apply(this, args);
-      try {
-        pageViewed();
-      } catch {
-        // never break navigation
-      }
-      return result;
-    };
-  }
-  window.addEventListener("popstate", pageViewed);
+  onNavigation(pageViewed);
   pageViewed();
 }

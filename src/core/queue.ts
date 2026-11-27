@@ -150,7 +150,7 @@ export function createQueue() {
       log(
         result.status
           ? `server answered ${result.status}, retrying ${batch.items.length} event(s) in ${delay} ms`
-          : `request failed (offline, timed out, or blocked by CORS when the origin is not allowed), retrying ${batch.items.length} event(s) in ${delay} ms`,
+          : `request failed (offline, timeout, or CORS: is the origin allowed?), retrying ${batch.items.length} event(s) in ${delay} ms`,
       );
       // Only one batch waits for a retry; another one goes back to the queue behind it.
       if (held && held !== batch) {

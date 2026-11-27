@@ -20,12 +20,49 @@ export const accepted = (extra: Record<string, unknown> = {}) =>
 export const failure = (status: number, error: string, headers?: Record<string, string>) =>
   json(status, { error, message: "..." }, headers);
 
-/** Replaces global fetch. Returns the list of requests made so far. */
+export interface SurveyCall {
+  url: string;
+  init: RequestInit;
+  body: any;
+}
+
+type SurveyHandler = (call: SurveyCall, n: number) => Response | Promise<Response>;
+
+/** The surveys list endpoint's answer. */
+export const surveyList = (surveys: unknown[] = [], ttl = 300) => json(200, { data: { surveys, ttl } });
+
+/** Requests to `/api/sdk/surveys/**` since the last `mockFetch` call. */
+export let surveyCalls: SurveyCall[] = [];
+
+const defaultSurveyAnswer: SurveyHandler = (call) => {
+  if (call.url.endsWith("/events")) return new Response(null, { status: 204 });
+  if (call.url.endsWith("/responses")) return json(200, { data: { ok: true } });
+  return surveyList();
+};
+let surveyHandler: SurveyHandler = defaultSurveyAnswer;
+
+/** Sets how the survey endpoints answer; unanswered paths fall back to the defaults. */
+export function mockSurveys(handler: (call: SurveyCall, n: number) => Response | Promise<Response> | undefined) {
+  surveyHandler = (call, n) => handler(call, n) ?? defaultSurveyAnswer(call, n);
+}
+
+/**
+ * Replaces global fetch. Returns the list of event requests made so far.
+ * Requests to the survey endpoints go to `surveyCalls` instead, answered
+ * by `mockSurveys` (by default an empty list, 204 for events, ok for responses).
+ */
 export function mockFetch(handler: Handler = () => accepted()): Call[] {
   const calls: Call[] = [];
+  surveyCalls = [];
+  surveyHandler = defaultSurveyAnswer;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init: RequestInit) => {
+      if (url.includes("/api/sdk/surveys")) {
+        const call = { url, init, body: JSON.parse(init.body as string) };
+        surveyCalls.push(call);
+        return surveyHandler(call, surveyCalls.length);
+      }
       const body = init.body as string;
       const call = { url, init, body, events: JSON.parse(body).events as WireEvent[] };
       calls.push(call);

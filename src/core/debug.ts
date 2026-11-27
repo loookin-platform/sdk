@@ -20,9 +20,9 @@ export function describeRejection(event: WireEvent | undefined, r: Rejection): s
 
 /** Why sending stopped for good, in words a developer can act on. */
 export function describeDisabled(status: number, error: string): string {
-  const until = "Nothing more will be sent until the page reloads.";
+  const until = "Sending stops until the page reloads.";
   if (error === "origin_not_allowed") {
-    return `This page's origin is not on the key's allowed origins. Add it to the key in your workspace. ${until}`;
+    return `This page's origin is not on the key's allowed origins. ${until}`;
   }
   if (error === "quota_exceeded") return `The workspace's event quota is used up. ${until}`;
   return `The server refused the key (${status} ${error}). ${until}`;

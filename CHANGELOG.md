@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- **Banner** surveys: a bar at the top or bottom edge (the Design's
+  Position). On a wide screen the step is one row (question, answer and
+  button, without description, progress bar and Back); under 640 px it
+  stacks. A Banner shares the one-at-a-time slot with Popup and Modal.
+- **Tooltip** surveys: a small card with a pointer next to the element the
+  Design's Anchor names, on the side with room, following it on scroll,
+  resize and layout changes. Not shown while the anchor is missing; closes
+  without a dismissal when the anchor leaves the page. Tooltips do not
+  compete with other formats; at most one per anchor.
+- **Embed** surveys and `loookin.mountSurvey(key, target)`: the survey is
+  drawn inside an element (or the first match of a selector) while it
+  applies to the current identity, with no close button and no triggers.
+  Returns a function that removes it; never throws. Its room is kept as soon
+  as it applies and `survey_viewed` is sent when it is in the viewport.
+- Types `SurveyTarget` and `UnmountSurvey`.
+- A Tooltip waits for a visible anchor (box in the viewport, not clipped,
+  `checkVisibility()`), follows an anchor the app re-rendered, and always has
+  a close button.
+- Surveys hide and wait while the page shows a modal dialog of its own.
+- Popup, Banner, Tooltip and Embed announce their question to screen readers.
+- A refused or failed `survey_viewed` is not tried again on that page for
+  that user, in any format.
+
+### Changed
+
+- `reset()`, a change of identity and `stop()` also remove mounted embeds
+  (after `reset()` and an identity change they come back when the next
+  list has them).
+- `showSurvey(key)` can show a Banner or a Tooltip; it resolves to `false`
+  for an Embed.
+
 ## 0.2.0
 
 ### Added
@@ -36,7 +71,7 @@
   `history.pushState` and `history.replaceState`.
 - Shorter debug messages.
 
-Banner, Tooltip and Embed surveys are ignored by this version.
+Banner, Tooltip and Embed surveys are ignored by 0.2.0.
 
 ## 0.1.2
 

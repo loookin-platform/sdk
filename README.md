@@ -51,6 +51,7 @@ Property values are flat: text, number, boolean or `null`.
 | `loookin.reset()` | Forgets the identity, for example on logout. |
 | `loookin.stop()` | Drops everything that is queued, removes the stored device id and sends nothing more until the page reloads, for example when a user opts out. Also closes an open survey and removes every listener the surveys added. |
 | `loookin.showSurvey(key)` | Shows an in-app survey now, without waiting for its triggers. Returns a promise of `true` when it was shown. Never rejects. See [Surveys](#surveys). |
+| `loookin.mountSurvey(key, target)` | Puts an Embed survey into `target` (an element or a CSS selector) while it applies to the current user. Returns a function that removes it. Never throws. See [Embed](#embed). |
 
 ### Options
 
@@ -147,8 +148,9 @@ shown, to notice in-app navigation (see [Surveys](#surveys)).
 
 ## Surveys
 
-Surveys you build in your workspace with the type **Popup** or **Modal** show
-up inside your app, without a new deploy. They are on by default.
+Surveys you build in your workspace with the type **Popup**, **Modal**,
+**Banner** or **Tooltip** show up inside your app, without a new deploy, and
+an **Embed** shows wherever you mount it. They are on by default.
 
 ```js
 loookin.init({ workspace: "acme", key: "pub_..." });
@@ -185,15 +187,19 @@ How it works:
   also on in-app navigation), an event you `track`, an element becoming
   visible, a click on an element, time on page and exit intent (mouse only).
   Nothing is sent to evaluate them.
-- At most one survey is on screen. When several apply, the one with the
-  higher priority comes first; the next one waits for the next address change.
-  A survey shown in one tab is not shown in another.
+- At most one Popup, Modal or Banner is on screen. When several apply, the
+  one with the higher priority comes first; the next one waits for the next
+  address change. Tooltips and Embeds do not compete for the screen: they show
+  next to them. A survey shown in one tab is not shown in another (Embeds
+  excepted: they are part of the page).
 - `reset()` and a new identity close an open survey and drop the list.
   `stop()` also removes every listener the surveys added.
 - `showSurvey(key)` skips the triggers, not the server's decision: a survey
   that is paused, out of its audience or over its limits is not shown, and
-  the promise resolves to `false`. It also resolves to `false` while another
-  survey is open, before `init` and `identify`, and with `surveys: false`.
+  the promise resolves to `false`. It also resolves to `false` for a Popup,
+  Modal or Banner while another of them is open, for a Tooltip whose anchor
+  is not on the page, for an Embed, before `init` and `identify`, and with
+  `surveys: false`.
 - Answers and the run (shown, started, steps, closed) are sent to
   `/api/sdk/surveys/{key}/events` and `/api/sdk/surveys/{key}/responses` of
   your workspace. Requests time out after 5 seconds and are never retried. If
@@ -206,16 +212,89 @@ How it works:
 | `surveys: { language: "de" }` | On, and send the visitor's preferred language with the request (the server shows each survey in its default language for now) |
 | `surveys: { webFonts: true }` | On, and load the web font a survey's Design names, see below |
 
-Formats in this version: **Popup** (a card in the corner the survey's Design
-sets, at the bottom across the full width on a narrow screen) and **Modal**
-(a card in the middle with an optional backdrop, a sheet from the bottom on a
-narrow screen). Surveys of the types Banner, Tooltip and Embed are ignored by
-this version, silently; they come with a later version, and so do definitions
-with a newer schema than the SDK knows.
+### Formats
+
+| Format | Where it shows | Narrow screen (under 640 px) | Triggers |
+|---|---|---|---|
+| **Popup** | A card in the corner the Design sets | At the bottom, full width | All |
+| **Modal** | A card in the middle, optional backdrop, page scrolling locked | A sheet from the bottom | All |
+| **Banner** | A bar across the top or bottom edge (Design: Position). The step is one row: question, answer and button, without description, progress bar and Back | The step stacks like in a Popup | Page load, event, time on page |
+| **Tooltip** | A small card with a pointer next to the element the Design's Anchor names, on the side with room | The same card, kept inside the window | Page load, event, click |
+| **Embed** | Inside an element you choose with `mountSurvey` | Takes the element's width | None |
+
+Definitions with a newer schema than the SDK knows, and formats it does not
+know, are ignored silently. A Banner and a Tooltip never take the keyboard
+focus and do not lock scrolling. On a Banner a step with wide controls (a
+scale of more than 5 points, more than 4 options) is one row only from
+1000 px and stacks below that. Popup, Banner, Tooltip and Embed announce
+their question once to screen readers (a polite live region) without moving
+the focus.
+
+While your page shows a modal dialog of its own (`<dialog>` opened with
+`showModal()`, matched by `:modal`), no survey shows, and an open Popup,
+Banner or Tooltip hides until the dialog closes: outside the dialog it could
+not be used. A survey whose view the server refused, or that could not be
+drawn, is not tried again on that page for that user.
+
+#### Tooltip
+
+A Tooltip needs its anchor on the page: an element matching the CSS selector
+in the survey's Design (Anchor), for example `#export-button`. Give that
+element a stable id or class. When the triggers hold, the Tooltip waits until
+the anchor is there and someone can see it: it has a box, is inside the
+viewport, is not clipped away by its scroll container and is not hidden
+(`checkVisibility()` where the browser has it). Until then nothing is drawn
+and nothing is sent, and it can still show later on the same page, for
+example when the user scrolls to the anchor or your app renders it late.
+While the Tooltip is open it follows the anchor when the page scrolls or
+resizes and hides while the anchor is out of view. If your app re-renders
+the anchor, it moves to the new element; if no element matches for a few
+frames, it closes without counting as dismissed. The anchor itself is never
+changed. At most one Tooltip is attached to an element at a time. A Tooltip
+always has a close button, also when its Design turns the close button off:
+it floats over your own controls.
+
+#### Embed
+
+```js
+// Anywhere in your page, before or after identify:
+const unmount = loookin.mountSurvey("product-feedback", "#feedback");
+// or with an element: loookin.mountSurvey("product-feedback", element)
+
+// When the element leaves your page (for example a React effect cleanup):
+unmount();
+```
+
+- The survey appears in the element when the list for the current user has
+  it as an Embed. Until then, and when it does not apply, the element stays
+  empty. A mount made before `init` or `identify` fills in when the list
+  arrives.
+- What it adds: one `<loookin-survey>` element as the last child of your
+  element, with the survey in its shadow root. Nothing else in your element
+  changes, and `unmount()` removes exactly that element.
+- Its room is taken as soon as it is known to apply (the survey is drawn
+  invisibly), so the page does not jump when it becomes visible. It counts
+  as viewed (`survey_viewed`) only when at least half of it is in the
+  viewport, and it becomes visible and usable then.
+- No close button and no triggers. After an answer the thank you stays in
+  the element. `showSurvey` does not show an Embed.
+- Unmounting and mounting it again, or your app re-rendering its element,
+  does not count as a new view: an Embed already seen on this page shows
+  again at once, without a second `survey_viewed`. One that was answered
+  stays empty after a remount, and one whose view the server refused stays
+  empty (no room is kept). A mount of an element that left your page is
+  forgotten.
+- `reset()` and a new identity remove it; it comes back if the list for the
+  next identity has it. `stop()` removes it for good. Several embeds can be
+  mounted at once; the same key mounted twice is drawn in one element at a time.
+- With a selector, the first matching element is used. If none matches yet,
+  the SDK looks again when the page changes (at most twice a second), right
+  after an address change and shortly after it, and when a new list arrives.
 
 What the SDK adds to your page while a survey is open:
 
-- One element, `<loookin-survey>`, appended to `document.body`. Everything
+- One element, `<loookin-survey>`, appended to `document.body` (for an
+  Embed, to the element you mounted it in). Everything
   is drawn inside its shadow root, with its styles inside too: your CSS does
   not change the survey and the survey's CSS does not change your page. Text
   from the survey is always inserted as text, never as HTML. Icons are inline
@@ -255,8 +334,9 @@ workspace at run time: the renderer is part of the package you install.
 Survey definitions come from your workspace, so it is worth knowing their
 reach. A definition can only put text on the page (always as text, never as
 markup; the build fails if the code could insert HTML or run code), colours
-that are validated `#rrggbb` values, a font from a fixed list, and one of four
-positions. CSS selectors in triggers are only used to match elements
+that are validated `#rrggbb` values, a font from a fixed list, and one of a
+few fixed positions. CSS selectors in triggers and a Tooltip's anchor are only
+used to match elements
 (`:has(` is refused, at most 20 elements per selector are observed); URL rules
 are only compared with the address. A malformed definition is skipped.
 Nothing about your page is sent to evaluate triggers, but a survey that is

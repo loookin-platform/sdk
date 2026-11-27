@@ -1,6 +1,7 @@
 /**
  * The survey's own element on the host page: one element appended to
- * `document.body` with a shadow root. Styles live inside the shadow root;
+ * `document.body` (an Embed: to the element the developer gave) with a
+ * shadow root. Styles live inside the shadow root;
  * the host page's classes and styles are never touched. The Design becomes
  * `--cp-*` variables on the root. The font is the host page's, unless the
  * page opted into web fonts (`surveys: { webFonts: true }`).
@@ -8,13 +9,16 @@
  * Where the browser supports it the element goes into the top layer
  * (`popover="manual"`), so a `transform` or `filter` on the page's body or
  * a competing z-index cannot misplace it; elsewhere it is fixed with the
- * highest z-index. It stays invisible until `reveal()`.
+ * highest z-index. An Embed is a plain block in the flow of the page. It
+ * stays invisible until `reveal()`; an Embed already takes its room then.
  */
 import type { SdkSurvey } from "../types";
 import { h } from "./dom";
 import { CSS, designVars, fontStack, googleFontHref } from "./styles";
 
 export interface SurveyHostElement {
+  /** The `<loookin-survey>` element itself. */
+  el: HTMLElement;
   /** The element inside the shadow root that everything is drawn into. */
   root: HTMLElement;
   shadow: ShadowRoot;
@@ -22,6 +26,8 @@ export interface SurveyHostElement {
   connected(): boolean;
   /** Makes the survey visible, in the top layer when the browser has one. */
   reveal(): void;
+  /** Hides a revealed survey for a while (a modal dialog of the page is open), or shows it again. */
+  hide(on: boolean): void;
   /** Removes the element (and a font stylesheet only this survey needed). */
   remove(): void;
 }
@@ -68,6 +74,12 @@ function useFont(font: unknown): (() => void) | undefined {
   };
 }
 
+/** Inline styles of an Embed's element: nothing of the page's CSS applies, a block as wide as its parent. */
+const INLINE_STYLE: [string, string][] = [
+  ["all", "initial"],
+  ["display", "block"],
+];
+
 /** Inline styles of the element itself: nothing of the page's CSS applies, it takes no room and no clicks. */
 const HOST_STYLE: [string, string][] = [
   ["all", "initial"],
@@ -85,10 +97,11 @@ const HOST_STYLE: [string, string][] = [
   ["z-index", "2147483000"],
 ];
 
-export function createHostElement(survey: SdkSurvey, webFonts: boolean): SurveyHostElement {
+/** `parent`: an Embed's target, which gets the element as its last child; otherwise `document.body`. */
+export function createHostElement(survey: SdkSurvey, webFonts: boolean, parent?: Element): SurveyHostElement {
   const el = document.createElement("loookin-survey");
-  for (const [name, value] of HOST_STYLE) el.style.setProperty(name, value, "important");
-  const topLayer = typeof (el as { showPopover?: unknown }).showPopover === "function";
+  for (const [name, value] of parent ? INLINE_STYLE : HOST_STYLE) el.style.setProperty(name, value, "important");
+  const topLayer = !parent && typeof (el as { showPopover?: unknown }).showPopover === "function";
   if (topLayer) el.setAttribute("popover", "manual");
   const shadow = el.attachShadow({ mode: "open" });
   addStyles(shadow);
@@ -106,10 +119,17 @@ export function createHostElement(survey: SdkSurvey, webFonts: boolean): SurveyH
   root.style.setProperty("--cp-font", font || "system-ui, sans-serif");
   root.style.setProperty("visibility", "hidden");
   shadow.appendChild(root);
-  const releaseFont = webFonts ? useFont(survey.design.font) : undefined;
-  document.body.appendChild(el);
+  (parent ?? document.body).appendChild(el);
+  let releaseFont: (() => void) | undefined;
+  try {
+    releaseFont = webFonts ? useFont(survey.design.font) : undefined;
+  } catch (error) {
+    el.remove();
+    throw error;
+  }
 
   return {
+    el,
     root,
     shadow,
     connected: () => el.isConnected,
@@ -122,6 +142,10 @@ export function createHostElement(survey: SdkSurvey, webFonts: boolean): SurveyH
         }
       }
       root.style.removeProperty("visibility");
+    },
+    hide(on) {
+      if (on) root.style.setProperty("visibility", "hidden");
+      else root.style.removeProperty("visibility");
     },
     remove() {
       el.remove();

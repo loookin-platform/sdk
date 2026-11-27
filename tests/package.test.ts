@@ -37,6 +37,12 @@ describe("the surveys entry", () => {
     for (const api of ["innerHTML", "insertAdjacentHTML", "outerHTML", "document\\.write", "eval\\(", "new Function"]) expect(size).toContain(api);
   });
 
+  it("keeps the size budgets: the browser entry under 5000 B and the renderer under 18000 B gzipped", () => {
+    const size = read("scripts/size.mjs");
+    expect(size).toContain('"dist/browser.js": 5000');
+    expect(size).toContain('"dist/surveys.js": 18000');
+  });
+
   it("has no runtime dependencies", () => {
     const pkg = JSON.parse(read("package.json"));
     expect(pkg.dependencies ?? {}).toEqual({});

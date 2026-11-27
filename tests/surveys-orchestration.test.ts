@@ -49,9 +49,9 @@ describe("which survey shows", () => {
     expect(shadow()).toBeNull();
   });
 
-  it("ignores Banner, Tooltip, Embed and definitions with a higher schema, silently", async () => {
+  it("ignores unknown formats and definitions with a higher schema, silently", async () => {
     const errors = vi.spyOn(console, "error");
-    await start([titled("banner", { format: "banner" }), titled("tooltip", { format: "tooltip" }), titled("embed", { format: "embed" }), titled("future", { schema: 2 }), titled("popup")]);
+    await start([titled("page", { format: "page" }), titled("carousel", { format: "carousel" }), titled("future", { schema: 2 }), titled("popup")]);
     expect(shownKey()).toBe("popup");
     expect(errors).not.toHaveBeenCalled();
   });

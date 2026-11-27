@@ -20,6 +20,8 @@ export interface StepProps {
   canBack: boolean;
   /** False hides Back and the button (thank you after sending). */
   actions: boolean;
+  /** One row (Banner on a wide screen): no description, no Back, a text answer on a single line. */
+  compact?: boolean;
   /** Unique within the page, for `aria-labelledby`. */
   id: string;
   /** Longest text answer; the counter shows close to it. */
@@ -79,7 +81,7 @@ export function renderStep(props: StepProps): StepView {
       "div",
       {},
       h("h2", { class: "title", id: titleId }, step.title || "", step.required && asks && h("span", { class: "req", "aria-hidden": "true" }, " *")),
-      !!step.description && h("p", { class: "desc" }, step.description),
+      !!step.description && !props.compact && h("p", { class: "desc" }, step.description),
     ),
   );
 
@@ -93,7 +95,8 @@ export function renderStep(props: StepProps): StepView {
       placeholder: step.placeholder || undefined,
       maxlength: String(props.maxLength),
     };
-    const field = step.long ? h("textarea", { ...attrs, rows: "4" }) : h("input", { ...attrs, type: "text" });
+    const single = !step.long || !!props.compact;
+    const field = single ? h("input", { ...attrs, type: "text" }) : h("textarea", { ...attrs, rows: "4" });
     const counter = h("p", { class: "count", "aria-live": "polite", hidden: true });
     const count = () => {
       const n = field.value.length;
@@ -106,7 +109,7 @@ export function renderStep(props: StepProps): StepView {
       count();
       change(field.value);
     });
-    if (!step.long) {
+    if (single) {
       on<KeyboardEvent>(field, "keydown", (e) => {
         // Enter on a short text means Next; not while composing characters (IME).
         if (e.key === "Enter" && !e.isComposing && !next.disabled) {
@@ -123,11 +126,14 @@ export function renderStep(props: StepProps): StepView {
 
   const row = h("div", { class: "actions" });
   if (props.actions) {
-    const back = props.canBack ? h("button", { type: "button", class: "back", "data-nav": "back" }, "Back") : h("span");
-    on(back, "click", () => {
-      if (!busy) props.onBack();
-    });
-    row.append(back, next);
+    const back = props.canBack && !props.compact ? h("button", { type: "button", class: "back", "data-nav": "back" }, "Back") : !props.compact && h("span");
+    if (back) {
+      on(back, "click", () => {
+        if (!busy) props.onBack();
+      });
+      row.append(back);
+    }
+    row.append(next);
     parts.push(row);
   }
   ready();

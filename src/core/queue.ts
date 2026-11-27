@@ -221,7 +221,7 @@ export function createQueue() {
     }
   }
 
-  const settle = (work: Promise<void>) => work.catch((error) => log("unexpected error", error));
+  const settle = (work: Promise<void>) => work.catch((error) => log("error", error));
 
   /**
    * Sends what can be sent now. Resolves after the attempt; never rejects.

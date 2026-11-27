@@ -15,14 +15,15 @@ afterEach(() => vi.doUnmock("../src/surveys"));
 /** Replaces the surveys entry with a spy, to see whether the core loads it. */
 function spyOnSurveysEntry() {
   const loaded = vi.fn();
-  const controller = { update: vi.fn(), track: vi.fn(), address: vi.fn(), check: vi.fn(), show: vi.fn(async () => true), close: vi.fn(), stop: vi.fn() };
+  const unmount = vi.fn();
+  const controller = { update: vi.fn(), track: vi.fn(), address: vi.fn(), check: vi.fn(), show: vi.fn(async () => true), mount: vi.fn(() => unmount), close: vi.fn(), stop: vi.fn() };
   vi.doMock("../src/surveys", () => ({
     startSurveys: (host: unknown) => {
       loaded(host);
       return controller;
     },
   }));
-  return { loaded, controller };
+  return { loaded, controller, unmount };
 }
 
 describe("asking for surveys", () => {
@@ -122,10 +123,46 @@ describe("loading the renderer", () => {
     expect(loaded).not.toHaveBeenCalled();
   });
 
+  it("does not load it for a mountSurvey alone, with no list or an empty one", async () => {
+    const { loaded } = spyOnSurveysEntry();
+    mockFetch();
+    const loookin = await loadSdk();
+    const remove = loookin.mountSurvey("inline", document.body);
+    await settle();
+    expect(loaded).not.toHaveBeenCalled();
+    loookin.init(options);
+    loookin.identify("u1");
+    await settle();
+    expect(lists()).toHaveLength(1);
+    expect(loaded).not.toHaveBeenCalled();
+    expect(() => remove()).not.toThrow();
+  });
+
+  it("hands mounts made before the renderer loaded over to it, and their remove functions too", async () => {
+    const { loaded, controller, unmount } = spyOnSurveysEntry();
+    mockFetch();
+    mockSurveys(() => surveyList([survey({ key: "inline", format: "embed", triggers: [] })]));
+    const loookin = await loadSdk();
+    const slot = document.createElement("div");
+    const remove = loookin.mountSurvey("inline", slot);
+    loookin.init(options);
+    loookin.identify("u1");
+    await settle();
+    expect(loaded).toHaveBeenCalledTimes(1);
+    // The renderer takes over the mounts recorded before it loaded.
+    const host = loaded.mock.calls[0]![0] as { mounts: Set<[string, unknown, (() => void)?]> };
+    expect([...host.mounts].map(([key, target]) => [key, target])).toEqual([["inline", slot]]);
+    [...host.mounts][0]![2] = unmount;
+    loookin.mountSurvey("later", "#slot");
+    expect(controller.mount).toHaveBeenLastCalledWith("later", "#slot");
+    remove();
+    expect(unmount).toHaveBeenCalledTimes(1);
+  });
+
   it("loads it for any non-empty list; the renderer itself skips formats and schemas it cannot draw", async () => {
     const { loaded, controller } = spyOnSurveysEntry();
     mockFetch();
-    const list = [survey({ key: "b", format: "banner" }), survey({ key: "p" })];
+    const list = [survey({ key: "c", format: "carousel" }), survey({ key: "p" })];
     mockSurveys(() => surveyList(list));
     const loookin = await loadSdk();
     loookin.init(options);

@@ -67,6 +67,7 @@ export function modalFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: str
   return {
     card,
     placed: overlay,
+    position: "fixed",
     modal: true,
     activate() {
       before = document.activeElement as HTMLElement | null;

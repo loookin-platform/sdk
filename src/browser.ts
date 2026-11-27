@@ -9,6 +9,11 @@ import type { SdkSurvey, SurveyHost, SurveyIdentity, SurveysController } from ".
 
 export type { IdentifyOptions, InitOptions, Properties, PropertyValue } from "./core/types";
 
+/** Where `mountSurvey` puts an Embed: an element, or a CSS selector for the first match. */
+export type SurveyTarget = Element | string;
+/** Removes what `mountSurvey` added; calling it again does nothing. */
+export type UnmountSurvey = () => void;
+
 const DEVICE_KEY = "loookin_device";
 /** Anonymous mode only: which surveys this device has seen (written by the surveys entry). */
 const SURVEYS_KEY = "loookin_surveys";
@@ -41,6 +46,9 @@ let loading: Promise<SurveysController> | undefined;
 let surveys: SurveysController | undefined;
 /** Names passed to track() for the current identity, for `event` triggers. */
 const tracked = new Set<string>();
+/** mountSurvey() calls: key, target, and the renderer's remove function once it is loaded. */
+type Mount = [string, SurveyTarget, UnmountSurvey?];
+const mounts = new Set<Mount>();
 const off: (() => void)[] = [];
 
 /** False during server-side rendering, where every call is a no-op. */
@@ -96,7 +104,7 @@ function setIdentity(nextUser: string, nextCompany?: string) {
 
 function init(opts: InitOptions) {
   if (!hasDom() || queue.disabled) return;
-  if (options) return log("init() was already called");
+  if (options) return log("init() called twice");
 
   const debug = createLogger(opts?.debug);
   const key = cleanId(opts?.key);
@@ -112,7 +120,7 @@ function init(opts: InitOptions) {
   }
   const origin = resolveOrigin(opts?.workspace);
   if (!origin || !key) {
-    return debug("init() needs a workspace and a publishable key");
+    return debug("init() needs a workspace and a key");
   }
 
   options = opts;
@@ -136,7 +144,7 @@ function init(opts: InitOptions) {
   // The flush is forced: the page may be gone before a retry time comes.
   const onHide = () => {
     const waiting = queue.items.filter((item) => !item.event.user).length;
-    if (waiting) log(`${waiting} event(s) wait for identify(), lost if the page closes`);
+    if (waiting) log(`${waiting} event(s) wait for identify()`);
     void queue.flush(true);
   };
   // The tab coming back may find an old survey list; only then is it asked for again.
@@ -161,7 +169,7 @@ function init(opts: InitOptions) {
   if (s !== false) {
     const o = typeof s === "object" ? s : undefined;
     language = cleanId(o?.language);
-    surveyHost = { origin, key, identity: surveyIdentity, fresh: freshSurveys, events: tracked, id: uuid, log, since: navigatedAt, webFonts: o?.webFonts === true };
+    surveyHost = { origin, key, identity: surveyIdentity, fresh: freshSurveys, events: tracked, id: uuid, log, since: navigatedAt, webFonts: o?.webFonts === true, mounts };
     void askSurveys();
   }
 }
@@ -243,6 +251,20 @@ async function showSurvey(key: string): Promise<boolean> {
   }
 }
 
+/**
+ * Registers an Embed; the renderer fills `target` while the survey applies.
+ * The renderer loads with the first non-empty list, so a mount alone loads nothing.
+ */
+function mountSurvey(key: string, target: SurveyTarget): UnmountSurvey {
+  const mount: Mount = [key, target];
+  // Before the renderer loads it takes these over (and the core lets go of the targets).
+  if (hasDom() && !queue.disabled) surveys ? (mount[2] = surveys.mount(key, target)) : mounts.add(mount);
+  return () => {
+    mounts.delete(mount);
+    mount[2]?.();
+  };
+}
+
 function track(event: string, properties?: Properties) {
   if (!hasDom() || queue.disabled) return;
   if (typeof event !== "string" || !event) return log("track() needs an event name");
@@ -286,10 +308,11 @@ function stop() {
   } catch {
     // storage is blocked: there was nothing to remove
   }
-  queue.disable("stop(): sending stops until the page reloads");
+  queue.disable("stopped");
   surveyHost = undefined;
   refreshSurveys();
   surveys?.stop();
+  mounts.clear();
   for (const remove of off.splice(0)) remove();
 }
 
@@ -301,7 +324,7 @@ function guard<A extends unknown[]>(fn: (...args: A) => void) {
     try {
       fn(...args);
     } catch (error) {
-      log("unexpected error", error);
+      log("error", error);
     }
   };
 }
@@ -321,4 +344,16 @@ export const loookin = {
   stop: guard(stop),
   /** Shows a survey by its key now, without its triggers. Resolves to whether it was shown; never rejects. */
   showSurvey,
+  /**
+   * Puts an Embed survey into `target` (an element or a CSS selector) when it
+   * applies to the current identity, and keeps it there across identity
+   * changes. Returns the function that removes it. Never throws.
+   */
+  mountSurvey(key: string, target: SurveyTarget): UnmountSurvey {
+    try {
+      return mountSurvey(key, target);
+    } catch {
+      return noop;
+    }
+  },
 };

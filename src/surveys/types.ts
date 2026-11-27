@@ -110,6 +110,8 @@ export interface SurveyHost {
   since(): number;
   /** `surveys: { webFonts: true }`: load the web font a Design asks for. */
   webFonts: boolean;
+  /** `mountSurvey` calls made before this entry loaded: key, target, and the remove function this entry sets. */
+  mounts?: Set<[string, Element | string, (() => void)?]>;
 }
 
 /** What the surveys entry gives back to the core entry. Nothing here throws. */
@@ -124,14 +126,22 @@ export interface SurveysController {
   check(): void;
   /** Shows the survey now, without its triggers. Resolves to whether it was shown. */
   show(key: string): Promise<boolean>;
-  /** Closes an open survey and forgets the list (reset or identity change). */
+  /**
+   * Keeps an Embed in `target` (an element or a CSS selector) while the
+   * survey applies. Returns the function that removes it.
+   */
+  mount(key: string, target: Element | string): () => void;
+  /** Closes every open survey and forgets the list (reset or identity change). Mounted embeds stay registered. */
   close(): void;
   /** Closes everything and removes every listener. */
   stop(): void;
 }
 
-/** Formats this version renders. Banner, Tooltip and Embed are ignored for now. */
-export const RENDERED_FORMATS: readonly string[] = ["popup", "modal"];
+/** Formats this version renders. */
+export const RENDERED_FORMATS: readonly string[] = ["popup", "modal", "banner", "tooltip", "embed"];
+
+/** Formats that compete for the screen: at most one of them is open. Tooltip and Embed do not. */
+export const competes = (format: string): boolean => format === "popup" || format === "modal" || format === "banner";
 
 const STEP_TYPES = ["message", "rating", "choice", "text", "thanks"];
 const SCALES = ["nps", "ten", "stars", "emoji"];

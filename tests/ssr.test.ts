@@ -18,6 +18,7 @@ it("can be imported and called where window and document do not exist", async ()
     loookin.init({ workspace: "acme", key: "pub_abc", anonymous: true, debug: true });
     loookin.identify("u1", { company: "c1" });
     for (let i = 0; i < 40; i++) loookin.track("thing_done", { n: i });
+    loookin.mountSurvey("inline", "#feedback")();
     loookin.reset();
   }).not.toThrow();
   await expect(loookin.flush()).resolves.toBeUndefined();

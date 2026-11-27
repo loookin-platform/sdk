@@ -6,6 +6,13 @@
     <title>@loookin/sdk surveys manual test</title>
     <style>
       body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; }
+      #feedback { margin: 0 0 16px; min-height: 0; border: 1px dashed #bbb; border-radius: 8px; padding: 8px; }
+      #feedback:empty::before { content: "Embed target (#feedback): empty until a mounted survey applies"; color: #888; font-size: 13px; }
+      @media (max-width: 640px) {
+        body { margin: 12px auto; }
+        input[type="text"] { width: 100%; box-sizing: border-box; }
+        label { display: block; margin: 4px 0; }
+      }
       fieldset { margin: 0 0 16px; padding: 12px 16px; border: 1px solid #ccc; border-radius: 8px; }
       label { display: inline-block; margin: 4px 12px 4px 0; }
       input[type="text"] { font: inherit; padding: 4px 8px; width: 220px; }
@@ -29,7 +36,9 @@
     <p>
       Pass <code>?workspace=</code> (a slug or an origin, for a local server for example
       <code>http://sandbox.localhost:3000</code>) and <code>?key=pub_...</code> in the address, or type them below.
-      Create a Popup or Modal survey with yourself in Test users to see it without publishing.
+      Create a Popup, Modal, Banner or Tooltip survey with yourself in Test users to see it
+      without publishing. For a Tooltip set its Anchor to <code>#example-anchor</code>; for an
+      Embed type its key below and press mountSurvey.
     </p>
 
     <fieldset>
@@ -48,14 +57,19 @@
       <button id="track">Track</button><br />
       <button data-path="?page=orders">pushState ?page=orders</button>
       <button data-path="#pricing">pushState #pricing</button>
-      <button id="example-cta">A button for a Click trigger (#example-cta)</button>
+      <button id="example-cta">A button for a Click trigger (#example-cta)</button><br />
+      <button id="example-anchor">A Tooltip anchor (#example-anchor)</button>
     </fieldset>
 
     <fieldset>
-      <legend>3. Show by key</legend>
+      <legend>3. Show or mount by key</legend>
       <label>Survey key <input type="text" id="survey" placeholder="the survey's key" autocomplete="off" /></label>
       <button id="show">showSurvey</button>
+      <button id="mount">mountSurvey into #feedback</button>
+      <button id="unmount">Remove the embed</button>
     </fieldset>
+
+    <div id="feedback"></div>
 
     <pre id="log"></pre>
 
@@ -102,6 +116,17 @@
       $("show").onclick = async () => {
         const shown = await loookin.showSurvey($("survey").value);
         show("> showSurvey", $("survey").value, shown ? "shown" : "not shown");
+      };
+      let unmount;
+      $("mount").onclick = () => {
+        unmount?.();
+        unmount = loookin.mountSurvey($("survey").value, "#feedback");
+        show("> mountSurvey", $("survey").value, "#feedback");
+      };
+      $("unmount").onclick = () => {
+        unmount?.();
+        unmount = undefined;
+        show("> embed removed");
       };
     </script>
   </body>

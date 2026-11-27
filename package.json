@@ -1,6 +1,6 @@
 {
   "name": "@loookin/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Send product usage events to a Loookin workspace and show its in-app surveys.",
   "license": "MIT",
   "type": "module",

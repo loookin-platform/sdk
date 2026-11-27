@@ -126,6 +126,35 @@ export const CSS = `
 .back{font-size:13px;opacity:.6}
 .next{padding:8px 16px;border-radius:calc(var(--cp-radius) * .66);background:var(--cp-accent);color:#fff;font-size:14px;font-weight:500;transition:opacity .15s}
 .next:disabled{opacity:.4}
+.banner{left:0;right:0;width:100%;max-height:50vh;padding:12px 20px;border-radius:0;border-width:0}
+.banner.top{top:0;border-bottom-width:1px}.banner.bottom{bottom:0;border-top-width:1px}
+.banner.edge-none{border-width:0}
+.banner.stack{max-height:80vh}
+.banner.row{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.banner.row>div:not(.bar){flex:1;min-width:0}
+.banner .bar{margin:0}
+.banner.row .step{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.banner.row .step>div:first-child{flex:0 1 auto;min-width:0}
+.banner.row .title{font-size:15px}
+.banner.row .step>[role=group],.banner.row .field{flex:1 1 auto;min-width:120px}
+.banner.row .options{flex-direction:row;flex-wrap:wrap}
+.banner.row .options button{padding:6px 10px}
+.banner.row .scale button{padding:6px 0}
+.banner.row .icons button svg{width:28px;height:28px}
+.banner.row .ends,.banner.row .count{display:none}
+.banner.row .field{padding:7px 12px}
+.banner.row .actions{padding-top:0;flex:0 0 auto}
+.banner.row .done-icon{width:32px;height:32px}
+.tooltip{width:320px;max-width:calc(100vw - 16px);padding:16px;overflow:visible}
+.tooltip>.inner{display:flex;flex-direction:column;max-height:calc(100vh - 40px);overflow:auto;overscroll-behavior:contain}
+.arrow{position:absolute;width:12px;height:12px;background:var(--cp-card-bg);transform:rotate(45deg);border:0 solid var(--cp-card-border)}
+.tooltip:not(.edge-none) .arrow{border-width:1px}
+.tooltip[data-side=bottom] .arrow{top:-7px;border-right-width:0;border-bottom-width:0}
+.tooltip[data-side=top] .arrow{bottom:-7px;border-left-width:0;border-top-width:0}
+.tooltip[data-side=right] .arrow{left:-7px;border-right-width:0;border-top-width:0}
+.tooltip[data-side=left] .arrow{right:-7px;border-left-width:0;border-bottom-width:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.card.embed{position:relative;z-index:auto;width:100%;max-width:100%;max-height:none;overflow:visible;padding:20px}
 @media (max-width:640px){
 .popup,.popup.top-left,.popup.top-right,.popup.bottom-left,.popup.bottom-right{top:auto;left:0;right:0;bottom:0;width:100%;max-width:none;border-bottom-left-radius:0;border-bottom-right-radius:0}
 .overlay{align-items:flex-end;padding:0}

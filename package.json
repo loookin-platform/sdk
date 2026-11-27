@@ -24,15 +24,13 @@
       "types": "./dist/surveys.d.ts",
       "import": "./dist/surveys.js",
       "default": "./dist/surveys.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "types": "./dist/browser.d.ts",
   "files": [
     "dist"
   ],
-  "engines": {
-    "node": ">=22"
-  },
   "publishConfig": {
     "access": "public"
   },

@@ -10,11 +10,17 @@ const read = (file: string) => readFileSync(resolve(root, file), "utf8");
 describe("package.json", () => {
   it("gives every entry a default condition next to import, so require() finds it", () => {
     const exports = JSON.parse(read("package.json")).exports as Record<string, Record<string, string>>;
-    expect(Object.keys(exports)).toEqual([".", "./node", "./surveys"]);
-    for (const entry of Object.values(exports)) {
+    const { "./package.json": manifest, ...entries } = exports;
+    expect(Object.keys(entries)).toEqual([".", "./node", "./surveys"]);
+    for (const entry of Object.values(entries)) {
       expect(entry.default).toBe(entry.import);
       expect(Object.keys(entry)[0]).toBe("types"); // conditions match in order
     }
+    expect(manifest).toBe("./package.json"); // some tooling reads it
+  });
+
+  it("has no engines field: a browser package must not fail installs on older Node", () => {
+    expect(JSON.parse(read("package.json")).engines).toBeUndefined();
   });
 });
 

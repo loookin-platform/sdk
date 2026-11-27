@@ -35,6 +35,16 @@
 - `showSurvey(key)` can show a Banner or a Tooltip; it resolves to `false`
   for an Embed.
 
+### Packaging
+
+- No `engines` field: Yarn classic no longer fails the install on older
+  Node, and npm no longer warns. The Node client (`@loookin/sdk/node`) still
+  needs Node.js 22 or newer.
+- `@loookin/sdk/package.json` is exported, for tooling that reads it.
+- README: a Module format note (ESM only; TypeScript needs `moduleResolution`
+  `bundler`, `node16` or `nodenext` for `@loookin/sdk/surveys`), and
+  `showSurvey` resolving to `false` while a survey is on screen is not an error.
+
 ## 0.2.0
 
 ### Added

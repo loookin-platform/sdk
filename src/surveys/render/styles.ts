@@ -73,7 +73,7 @@ export function designVars(design: Partial<SurveyDesign> | undefined): Record<st
  * read from the body), or the Design's with `webFonts`. Direction is not
  * forced: the card has `dir="auto"`, so right-to-left text reads right.
  */
-export const CSS = `
+const BASE = `
 :host{all:initial}
 .root{all:initial;display:block;font-family:var(--cp-font);font-size:14px;font-weight:400;font-style:normal;line-height:1.4;letter-spacing:normal;word-spacing:normal;text-transform:none;text-align:start;text-indent:0;text-shadow:none;white-space:normal;color:var(--cp-text);visibility:visible;cursor:auto;-webkit-font-smoothing:antialiased}
 .root *,.root *::before,.root *::after{box-sizing:border-box;margin:0;padding:0;border:0;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;background:none}
@@ -155,9 +155,29 @@ export const CSS = `
 .tooltip[data-side=left] .arrow{right:-7px;border-left-width:0;border-bottom-width:0}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .card.embed{position:relative;z-index:auto;width:100%;max-width:100%;max-height:none;overflow:visible;padding:20px}
-@media (max-width:640px){
+`;
+
+/** The narrow-screen layout: under 640 px of viewport live, a `narrow` root in a preview. */
+const NARROW = `
 .popup,.popup.top-left,.popup.top-right,.popup.bottom-left,.popup.bottom-right{top:auto;left:0;right:0;bottom:0;width:100%;max-width:none;border-bottom-left-radius:0;border-bottom-right-radius:0}
 .overlay{align-items:flex-end;padding:0}
 .modal{max-width:none;padding:20px;border-bottom-left-radius:0;border-bottom-right-radius:0;max-height:90vh}
-}
 `;
+
+export const CSS = `${BASE}@media (max-width:640px){${NARROW}}
+`;
+
+/**
+ * The stylesheet of a preview. The root is the page: a box the size of the
+ * preview's element that contains everything (fixed cards are placed in it,
+ * not in the viewport), viewport units become units of that box, and the
+ * narrow layout follows a `narrow` class instead of the viewport's width.
+ * Plus the placeholders that stand in for a Tooltip's anchor and an Embed's block.
+ */
+export function previewCss(): string {
+  const narrow = NARROW.replace(/([^{}]+)\{/g, (_, selectors: string) => `${selectors.trim().split(",").map((s) => `.narrow ${s}`).join(",")}{`);
+  return `${BASE}${narrow}`.replace(/(\d+)v([hw])/g, "$1cq$2") +
+    ".root{position:absolute;inset:0;overflow:hidden;contain:strict;container-type:size;transform:translateZ(0)}" +
+    ".pv-anchor{position:absolute;top:24px;left:50%;transform:translateX(-50%);padding:6px 12px;border-radius:8px;border:1px dashed var(--cp-input-border);font-size:13px;opacity:.7}" +
+    ".pv-block{position:absolute;inset:0;overflow:auto;padding:20px}";
+}

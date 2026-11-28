@@ -10,10 +10,14 @@
  * anchor's box and the card's size once. While the anchor has no box or is
  * out of the viewport the card hides. When the anchor leaves the page the
  * run closes without a dismissal. Everything is removed on close.
+ *
+ * Sizes and listeners come from the stage: live the viewport; in a preview
+ * the preview's box, with the card placed relative to it.
  */
 import type { SdkSurvey } from "../types";
 import { h } from "./dom";
 import { edgeOf, type Frame, type FrameEnv } from "./popup";
+import { viewport, type Stage } from "./stage";
 
 /** Space between the anchor and the card, room for the pointer. */
 const GAP = 10;
@@ -76,7 +80,15 @@ export const ANCHOR_GRACE_FRAMES = 5;
  * `reanchor`: the anchor node left the page; returns the element the
  * selector matches now (visible and not taken by another Tooltip), or null.
  */
-export function tooltipFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: string, anchor: Element, env: FrameEnv, reanchor: () => Element | null = () => null): Frame {
+export function tooltipFrame(
+  survey: SdkSurvey,
+  root: HTMLElement,
+  labelledBy: string,
+  anchor: Element,
+  env: FrameEnv,
+  reanchor: () => Element | null = () => null,
+  stage: Stage = viewport,
+): Frame {
   const placed = h("div", { class: `card tooltip edge-${edgeOf(survey)}`, role: "dialog", "aria-labelledby": labelledBy, dir: "auto", "data-side": "bottom" });
   const arrow = h("span", { class: "arrow", "aria-hidden": "true" });
   const card = h("div", { class: "inner" });
@@ -91,6 +103,7 @@ export function tooltipFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: s
   let resize: ResizeObserver | undefined;
   let mutations: MutationObserver | undefined;
   let clip: IntersectionObserver | undefined;
+  let unlisten: (() => void) | undefined;
 
   const schedule = () => {
     if (active && !frame) frame = requestAnimationFrame(guarded);
@@ -130,9 +143,13 @@ export function tooltipFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: s
     }
     missing = 0;
     // Every read first, then the writes: one style flush per placement.
-    const a = anchor.getBoundingClientRect();
+    const r = anchor.getBoundingClientRect();
     const size = { width: placed.offsetWidth, height: placed.offsetHeight };
-    const view = { width: window.innerWidth, height: window.innerHeight };
+    const s = stage.box();
+    const view = { width: s.width, height: s.height };
+    // The anchor's box on the stage, in layout pixels (the viewport live, where this changes nothing).
+    const k = s.scale || 1;
+    const a = { top: (r.top - s.top) / k, left: (r.left - s.left) / k, bottom: (r.bottom - s.top) / k, right: (r.right - s.left) / k, width: r.width / k, height: r.height / k };
     const out = clipped || (!a.width && !a.height) || a.bottom < 0 || a.top > view.height || a.right < 0 || a.left > view.width || !rendered(anchor);
     if (out) return void placed.style.setProperty("visibility", "hidden");
     const at = placeTooltip(a, size, view);
@@ -153,8 +170,7 @@ export function tooltipFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: s
     activate() {
       if (active) return;
       active = true;
-      addEventListener("scroll", schedule, { capture: true, passive: true });
-      addEventListener("resize", schedule);
+      unlisten = stage.listen(schedule, true);
       if (typeof ResizeObserver === "function") {
         resize = new ResizeObserver(schedule);
         resize.observe(placed);
@@ -167,9 +183,10 @@ export function tooltipFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: s
       }
       follow(anchor);
       // Removing the anchor, or content moving it, shows up as a page mutation.
-      if (typeof MutationObserver === "function") {
+      const watched = stage.watched();
+      if (watched && typeof MutationObserver === "function") {
         mutations = new MutationObserver(schedule);
-        mutations.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
+        mutations.observe(watched, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
       }
       place();
     },
@@ -177,8 +194,8 @@ export function tooltipFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: s
       active = false;
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
-      removeEventListener("scroll", schedule, { capture: true });
-      removeEventListener("resize", schedule);
+      unlisten?.();
+      unlisten = undefined;
       resize?.disconnect();
       mutations?.disconnect();
       clip?.disconnect();

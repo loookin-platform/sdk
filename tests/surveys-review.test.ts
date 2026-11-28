@@ -326,7 +326,7 @@ describe("12 to 14. placement", () => {
     }
   });
 
-  it("closes at once when the styles did not apply, leaving the page as it was", async () => {
+  it("closes when the styles did not apply, also on a second look a frame later, leaving the page as it was", async () => {
     document.documentElement.removeAttribute("style");
     const real = window.getComputedStyle;
     const computed = vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
@@ -334,12 +334,33 @@ describe("12 to 14. placement", () => {
       return (el as Element).classList?.contains("overlay") ? ({ ...style, position: "static" } as CSSStyleDeclaration) : style;
     });
     const loookin = await start([manual({ format: "modal" })]);
-    await expect(loookin.showSurvey("nps")).resolves.toBe(false);
+    const shown = loookin.showSurvey("nps");
+    await vi.advanceTimersByTimeAsync(50); // the second look waits for the next frame
+    await expect(shown).resolves.toBe(false);
     expect(computed.mock.calls.some(([el]) => (el as Element).classList?.contains("overlay"))).toBe(true);
     expect(document.querySelector("loookin-survey")).toBeNull();
     expect(document.documentElement.getAttribute("style")).toBeNull();
     expect(events()).toEqual([]);
   });
+});
+
+it("shows a survey whose styles apply only a frame late (WebKit), sending nothing before", async () => {
+  const real = window.getComputedStyle;
+  let late = true;
+  vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+    const style = real(el, pseudo);
+    return late && (el as Element).classList?.contains("card") ? ({ ...style, position: "static" } as CSSStyleDeclaration) : style;
+  });
+  const loookin = await start([manual()]);
+  const shown = loookin.showSurvey("nps");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(events()).toEqual([]);
+  expect($(".root")!.style.getPropertyValue("visibility")).toBe("hidden");
+  late = false;
+  await vi.advanceTimersByTimeAsync(50);
+  await expect(shown).resolves.toBe(true);
+  expect(events()).toContain("survey_viewed");
+  expect($(".root")!.style.getPropertyValue("visibility")).toBe("");
 });
 
 describe("15 to 17. measuring", () => {

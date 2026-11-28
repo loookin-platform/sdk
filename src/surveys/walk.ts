@@ -86,7 +86,20 @@ export function progressOf(steps: Step[], stepKey: string): [number, number] {
   return [at, total];
 }
 
-export const startWalk = (): Walk => ({ history: [{ main: 0 }], answers: {} });
+/** Where the step with this key is, on the main line or in a branch; undefined when no step has it. */
+export function positionOf(steps: Step[], key: string): FlowPosition | undefined {
+  for (let main = 0; main < steps.length; main++) {
+    if (steps[main]!.key === key) return { main };
+    for (const branch of branchesOf(steps[main])) {
+      const index = branch.steps.findIndex((s) => s.key === key);
+      if (index >= 0) return { main, branch: { key: branch.key, index } };
+    }
+  }
+  return undefined;
+}
+
+/** A walk from the first step, or (a preview) from the step with the key `at`. */
+export const startWalk = (steps: Step[] = [], at?: string): Walk => ({ history: [(at !== undefined && positionOf(steps, at)) || { main: 0 }], answers: {} });
 
 export const walkPosition = (walk: Walk): FlowPosition => walk.history[walk.history.length - 1]!;
 

@@ -34,3 +34,9 @@ it("can import the surveys entry where window and document do not exist", async 
   const entry = await import("../src/surveys");
   expect(typeof entry.startSurveys).toBe("function");
 });
+
+it("can import mountSurveyPreview where window and document do not exist, and it does nothing", async () => {
+  const { mountSurveyPreview } = await import("../src/surveys");
+  const preview = mountSurveyPreview({} as Element, {} as never);
+  expect(() => (preview.update({} as never), preview.destroy())).not.toThrow();
+});

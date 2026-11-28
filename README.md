@@ -303,7 +303,7 @@ What the SDK adds to your page while a survey is open:
 - Where the browser supports it, the element is shown in the top layer
   (`popover="manual"`), so a `transform` on your `body` or a high z-index does
   not misplace it. If its styles cannot apply (for example a CSP that blocks
-  them), the survey closes at once and is not shown.
+  them), the survey closes and is not shown; nothing is sent for it.
 - For a Modal, `overflow: hidden` on `<html>` so that the page does not scroll
   behind it, put back exactly as it was when the Modal closes. A Modal moves
   the keyboard focus into the survey and returns it afterwards, and Escape
@@ -329,6 +329,49 @@ trigger listens only for the selectors your surveys name, and nothing is sent
 before a survey is shown), it does not use cookies, it uses browser storage
 for surveys only in anonymous mode, and it does not load code from your
 workspace at run time: the renderer is part of the package you install.
+
+### Previewing a survey
+
+`mountSurveyPreview` is meant for tools that display a survey definition,
+such as the survey editor in Loookin: it draws one definition into an element
+with the same renderer your visitors get. It sends nothing: no requests, no
+events or responses, no storage, no triggers, and no Test label.
+
+```ts
+import { mountSurveyPreview } from "@loookin/sdk/surveys";
+
+const preview = mountSurveyPreview(element, definition, {
+  narrow: false,      // true forces the narrow-screen layout
+  step: "s_2",        // key of the step to show first (default: the first step)
+  interactive: true,  // false draws the survey without letting anyone use it
+  webFonts: false,    // same meaning as surveys.webFonts in init
+  onStep: (stepKey) => {}, // the step on screen changed
+});
+preview.update(nextDefinition, options); // keeps the step on screen when it still exists
+preview.destroy(); // gives the element its children back
+```
+
+- `definition` has the shape the workspace's survey list returns.
+- The element's box is the page: a Popup sits in its corner, a Banner along
+  its edge, a Modal (with its backdrop) in its middle, a Tooltip next to a
+  placeholder anchor and an Embed in a placeholder block. Give the element a
+  width and a height. Its own children are taken out while the preview is in
+  it and put back on `destroy()`. Nothing goes into `document.body`, the page
+  does not stop scrolling and the focus does not move.
+- The element may be inside a same-origin iframe; the SDK can stay in the parent document.
+- The layout follows the element's width (narrow under 640 px), unless
+  `narrow` is set.
+- `update(definition)` without options keeps the options given before;
+  options passed to `update` replace only the keys they name.
+- Mounting again on the same element replaces the preview already there;
+  the earlier handle then does nothing.
+- An element that is not on the page or has no width yet is drawn as soon
+  as it has one.
+- The thank you stays on screen; Close starts again at the first step. A
+  preview Modal without a close button ignores Escape (in a customer's page
+  Escape always closes a Modal).
+- It never throws: a definition it cannot draw shows nothing, and the
+  returned methods then do nothing.
 
 ### What a workspace can make the SDK do in your page
 
@@ -437,6 +480,12 @@ needs `moduleResolution` set to `bundler`, `node16` or `nodenext`.
 
 Current versions of Chrome, Edge, Firefox and Safari. For development, Node.js 22 or newer.
 
+Browsers: every change runs a real-browser smoke test (`npm run test:browsers`)
+in Playwright's Chromium, Firefox and WebKit: each survey format shown live,
+and `mountSurveyPreview` on a scrolled page and inside an iframe. Safari itself
+and mobile browsers are not part of it. In 0.3.0, surveys did not render in
+Safari; use 0.3.1 or newer.
+
 ## Development
 
 ```sh
@@ -445,6 +494,8 @@ npm run typecheck
 npm test
 npm run build
 npm run size   # fails if dist/browser.js is over 5 kB or dist/surveys.js over 18 kB gzipped
+npx playwright install chromium firefox webkit   # once
+npm run test:browsers   # real-browser smoke test of the built dist/
 ```
 
 A page for trying the browser entry by hand is in `examples/browser/index.html`,

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.1
+
+### Added
+
+- `mountSurveyPreview(target, definition, options?)` in
+  `@loookin/sdk/surveys`: draws one survey definition into an element with
+  the live renderer, for tools that display a survey (such as the Loookin
+  editor). The element's box stands in for the page; nothing is sent or
+  stored, and no triggers run. Options `narrow`, `step`, `interactive`,
+  `webFonts` and `onStep`; returns `{ update, destroy }`. Never throws.
+- Types `SurveyPreview`, `SurveyPreviewOptions` and `SurveyDefinition`.
+- A real-browser smoke test (`npm run test:browsers`) in Chromium, Firefox
+  and WebKit, run in CI.
+
+### Fixed
+
+- Surveys did not render in Safari (WebKit) in 0.3.0, in any format: the
+  check that the survey's styles applied ran before WebKit applied them, so
+  every survey was removed at once. The styles are now applied as soon as
+  the element is on the page, and a survey whose styles are not there yet
+  gets a second look on the next frame (invisible, nothing sent) before it
+  is given up.
+- A survey element going into another document (an iframe) is now created
+  in that document, so it keeps its styles: `mountSurveyPreview` into an
+  element of a same-origin iframe works from the parent's SDK.
+
+### Changed
+
+- Internal: the survey frames read sizes and listen for layout changes
+  through a stage (the viewport live, the preview's element in a preview).
+  Nothing changes for live surveys.
+
 ## 0.3.0
 
 ### Added

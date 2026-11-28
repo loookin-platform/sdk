@@ -11,6 +11,20 @@
   stored, and no triggers run. Options `narrow`, `step`, `interactive`,
   `webFonts` and `onStep`; returns `{ update, destroy }`. Never throws.
 - Types `SurveyPreview`, `SurveyPreviewOptions` and `SurveyDefinition`.
+- A real-browser smoke test (`npm run test:browsers`) in Chromium, Firefox
+  and WebKit, run in CI.
+
+### Fixed
+
+- Surveys did not render in Safari (WebKit) in 0.3.0, in any format: the
+  check that the survey's styles applied ran before WebKit applied them, so
+  every survey was removed at once. The styles are now applied as soon as
+  the element is on the page, and a survey whose styles are not there yet
+  gets a second look on the next frame (invisible, nothing sent) before it
+  is given up.
+- A survey element going into another document (an iframe) is now created
+  in that document, so it keeps its styles: `mountSurveyPreview` into an
+  element of a same-origin iframe works from the parent's SDK.
 
 ### Changed
 

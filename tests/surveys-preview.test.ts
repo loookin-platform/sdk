@@ -432,6 +432,26 @@ describe("mountSurveyPreview", () => {
     expect(narrowTarget.querySelector("loookin-survey")!.shadowRoot!.querySelector(".root")!.classList.contains("narrow")).toBe(true);
   });
 
+  it("gives the target its children back when the styles never apply, and draws when they apply a frame late", async () => {
+    const markup = target.outerHTML;
+    const real = window.getComputedStyle;
+    let late = true;
+    vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+      const style = real(el, pseudo);
+      return late && (el as Element).classList?.contains("card") ? ({ ...style, position: "static" } as CSSStyleDeclaration) : style;
+    });
+    const preview = mount(flow());
+    expect(root()!.style.getPropertyValue("visibility")).toBe("hidden");
+    await vi.advanceTimersByTimeAsync(20);
+    expect(host()).toBeNull();
+    expect(target.outerHTML).toBe(markup);
+    preview.update(flow());
+    late = false;
+    await vi.advanceTimersByTimeAsync(20);
+    expect(root()!.style.getPropertyValue("visibility")).toBe("");
+    expect(target.querySelector("p")).toBeNull();
+  });
+
   it("exports its types from the surveys entry", () => {
     expectTypeOf(mountSurveyPreview).parameters.toEqualTypeOf<[Element, SurveyDefinition, SurveyPreviewOptions?]>();
     expectTypeOf(mountSurveyPreview).returns.toEqualTypeOf<SurveyPreview>();

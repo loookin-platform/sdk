@@ -65,6 +65,12 @@ export interface Run {
   el: Element;
   /** Hides a revealed survey while a modal dialog of the page is open, and shows it again. */
   hide(on: boolean): void;
+  /**
+   * Calls `cb(true)` once the survey's styles are known to apply (at once,
+   * usually), or `cb(false)` after the survey closed because they never did.
+   * Nothing may be shown or sent before.
+   */
+  whenStyled(cb: (ok: boolean) => void): void;
 }
 
 /** Where a survey goes: an Embed's target, or a Tooltip's anchor. */
@@ -125,8 +131,27 @@ export function prepareSurvey(survey: SdkSurvey, ctx: RunContext, webFonts: bool
                 : undefined;
     if (!frame) throw new Error("no frame for this format");
     const run = build(survey, ctx, host, frame, late);
-    // Unstyled (a strict CSP without constructable stylesheets): never show a broken survey.
-    if (getComputedStyle(frame.placed).position !== frame.position) throw new Error("survey styles did not apply");
+    // Unstyled (a strict CSP without constructable stylesheets): never show a broken survey. An engine
+    // that applies the styles a moment late gets one more look on the next frame; it stays invisible meanwhile.
+    const placed = frame;
+    const styled = () => getComputedStyle(placed.placed).position === placed.position;
+    if (styled()) {
+      run.whenStyled = (cb) => cb(true);
+      return run;
+    }
+    if (typeof requestAnimationFrame !== "function") throw new Error("survey styles did not apply");
+    let result: boolean | undefined;
+    const waiting: ((ok: boolean) => void)[] = [];
+    run.whenStyled = (cb) => (result === undefined ? waiting.push(cb) : cb(result));
+    requestAnimationFrame(() => {
+      try {
+        result = run.connected() && styled();
+      } catch {
+        result = false;
+      }
+      if (!result) run.close(false);
+      for (const cb of waiting) cb(result);
+    });
     return run;
   } catch {
     try {
@@ -341,5 +366,6 @@ function build(survey: SdkSurvey, ctx: RunContext, host: ReturnType<typeof creat
     hide(on) {
       if (revealed && !gone) host.hide(on);
     },
+    whenStyled: (cb) => cb(true),
   };
 }

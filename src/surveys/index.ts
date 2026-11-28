@@ -397,6 +397,11 @@ export function startSurveys(host: SurveyHost): SurveysController {
       run,
       session,
       async view() {
+        // Nothing is sent for a survey whose styles did not apply.
+        if (!(await new Promise<boolean>((resolve) => run!.whenStyled(resolve)))) {
+          refused.add(survey.key);
+          return false;
+        }
         const ok = await sendEvent(host.origin, host.key, survey.key, { identity, versionId: survey.versionId, session, event: "survey_viewed" });
         if (ok) {
           accepted = true;
@@ -559,7 +564,8 @@ export function startSurveys(host: SurveyHost): SurveysController {
       if (memo) {
         // Seen before on this page: shown again as it is, no second view.
         embed.accepted = true;
-        prepared.run.reveal();
+        const { run } = prepared;
+        run.whenStyled((ok) => ok && embed.run === run && run.reveal());
       } else observe(embed);
     }
     syncLateWatch();

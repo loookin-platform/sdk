@@ -303,7 +303,7 @@ What the SDK adds to your page while a survey is open:
 - Where the browser supports it, the element is shown in the top layer
   (`popover="manual"`), so a `transform` on your `body` or a high z-index does
   not misplace it. If its styles cannot apply (for example a CSP that blocks
-  them), the survey closes at once and is not shown.
+  them), the survey closes and is not shown; nothing is sent for it.
 - For a Modal, `overflow: hidden` on `<html>` so that the page does not scroll
   behind it, put back exactly as it was when the Modal closes. A Modal moves
   the keyboard focus into the survey and returns it afterwards, and Escape
@@ -358,6 +358,7 @@ preview.destroy(); // gives the element its children back
   width and a height. Its own children are taken out while the preview is in
   it and put back on `destroy()`. Nothing goes into `document.body`, the page
   does not stop scrolling and the focus does not move.
+- The element may be inside a same-origin iframe; the SDK can stay in the parent document.
 - The layout follows the element's width (narrow under 640 px), unless
   `narrow` is set.
 - `update(definition)` without options keeps the options given before;
@@ -479,6 +480,12 @@ needs `moduleResolution` set to `bundler`, `node16` or `nodenext`.
 
 Current versions of Chrome, Edge, Firefox and Safari. For development, Node.js 22 or newer.
 
+Browsers: every change runs a real-browser smoke test (`npm run test:browsers`)
+in Playwright's Chromium, Firefox and WebKit: each survey format shown live,
+and `mountSurveyPreview` on a scrolled page and inside an iframe. Safari itself
+and mobile browsers are not part of it. In 0.3.0, surveys did not render in
+Safari; use 0.3.1 or newer.
+
 ## Development
 
 ```sh
@@ -487,6 +494,8 @@ npm run typecheck
 npm test
 npm run build
 npm run size   # fails if dist/browser.js is over 5 kB or dist/surveys.js over 18 kB gzipped
+npx playwright install chromium firefox webkit   # once
+npm run test:browsers   # real-browser smoke test of the built dist/
 ```
 
 A page for trying the browser entry by hand is in `examples/browser/index.html`,

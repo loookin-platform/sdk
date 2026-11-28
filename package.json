@@ -39,6 +39,7 @@
     "test": "vitest run",
     "test:tabclose": "npm run build && node tests/manual/tab-close/engines.mjs",
     "test:tabclose:safari": "npm run build && node tests/manual/tab-close/safari.mjs",
+    "test:browsers": "node tests/browsers/smoke.mjs",
     "build": "tsup",
     "size": "node scripts/size.mjs",
     "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run size"

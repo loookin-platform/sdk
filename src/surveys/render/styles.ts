@@ -177,7 +177,7 @@ export const CSS = `${BASE}@media (max-width:640px){${NARROW}}
 export function previewCss(): string {
   const narrow = NARROW.replace(/([^{}]+)\{/g, (_, selectors: string) => `${selectors.trim().split(",").map((s) => `.narrow ${s}`).join(",")}{`);
   return `${BASE}${narrow}`.replace(/(\d+)v([hw])/g, "$1cq$2") +
-    ".root{position:absolute;inset:0;overflow:hidden;contain:strict;container-type:size}" +
+    ".root{position:absolute;inset:0;overflow:hidden;contain:strict;container-type:size;transform:translateZ(0)}" +
     ".pv-anchor{position:absolute;top:24px;left:50%;transform:translateX(-50%);padding:6px 12px;border-radius:8px;border:1px dashed var(--cp-input-border);font-size:13px;opacity:.7}" +
     ".pv-block{position:absolute;inset:0;overflow:auto;padding:20px}";
 }

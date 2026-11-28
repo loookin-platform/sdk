@@ -115,9 +115,10 @@ function mount(target: Element, first: SdkSurvey, initial: SurveyPreviewOptions)
     },
   };
 
-  // The target's own children wait outside while the preview is in it.
+  // The target's own children wait outside while a preview is drawn in it, and come back whenever none is.
   const kept = Array.from(target.childNodes);
-  target.replaceChildren();
+  const hold = () => kept.forEach((node) => node.parentNode === target && target.removeChild(node));
+  const restore = () => target.append(...kept.filter((node) => node.parentNode !== target));
 
   let resize: ResizeObserver | undefined;
   if (typeof ResizeObserver === "function") {
@@ -140,14 +141,21 @@ function mount(target: Element, first: SdkSurvey, initial: SurveyPreviewOptions)
     const previous = run;
     run = root = undefined;
     previous?.close(false);
-    if (!survey || gone) return;
+    if (!survey || gone) return restore();
     started = true;
-    run = prepareSurvey(
+    hold();
+    const drawn: Run | undefined = prepareSurvey(
       survey,
       {
         report() {},
         submit: () => Promise.resolve("ok"),
-        closed() {},
+        closed() {
+          // Closed by an error: nothing is drawn any more.
+          if (run && run === drawn) {
+            run = root = undefined;
+            restore();
+          }
+        },
         onClose: () => draw(),
         onStep(key) {
           if (key === current) return;
@@ -164,7 +172,18 @@ function mount(target: Element, first: SdkSurvey, initial: SurveyPreviewOptions)
       !!opts.webFonts,
       { stage },
     );
-    run?.reveal();
+    run = drawn;
+    if (!drawn) return restore();
+    drawn.whenStyled((ok) => {
+      if (run !== drawn) return;
+      if (!ok) {
+        run = root = undefined;
+        return restore();
+      }
+      drawn.reveal();
+      // Placed again now that it is visible (a Tooltip measures its anchor inside the preview).
+      for (const fn of [...listeners]) fn();
+    });
   }
 
   function destroy() {
@@ -175,7 +194,7 @@ function mount(target: Element, first: SdkSurvey, initial: SurveyPreviewOptions)
     const last = run;
     run = root = undefined;
     last?.close(false);
-    target.append(...kept.filter((node) => node.parentNode !== target));
+    restore();
     if (mounted.get(target) === handle) mounted.delete(target);
   }
 

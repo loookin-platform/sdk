@@ -39,17 +39,22 @@ export interface SurveyHostElement {
 /** One constructed stylesheet per kind: live, and preview. */
 const sheets: (CSSStyleSheet | undefined)[] = [];
 
-/** Constructed stylesheets are not subject to a page's `style-src`; `<style>` is the fallback. */
+/**
+ * Constructed stylesheets are not subject to a page's `style-src`; `<style>` is the fallback, and the
+ * way for an element in another document (an iframe), which cannot adopt this document's sheets.
+ */
 function addStyles(shadow: ShadowRoot, preview: boolean) {
   const kind = preview ? 1 : 0;
   const css = preview ? previewCss() : CSS;
-  try {
-    const sheet = (sheets[kind] ??= new CSSStyleSheet());
-    if (!sheet.cssRules.length) sheet.replaceSync(css);
-    shadow.adoptedStyleSheets = [sheet];
-    return;
-  } catch {
-    sheets[kind] = undefined;
+  if (shadow.ownerDocument === document) {
+    try {
+      const sheet = (sheets[kind] ??= new CSSStyleSheet());
+      if (!sheet.cssRules.length) sheet.replaceSync(css);
+      shadow.adoptedStyleSheets = [sheet];
+      return;
+    } catch {
+      sheets[kind] = undefined;
+    }
   }
   shadow.appendChild(h("style", {}, css));
 }
@@ -122,7 +127,8 @@ const HOST_STYLE: [string, string][] = [
 export function createHostElement(survey: SdkSurvey, webFonts: boolean, parent?: Element, stage?: Stage): SurveyHostElement {
   const contained = !!stage?.contained;
   if (contained) parent = stage!.parent;
-  const el = document.createElement("loookin-survey");
+  // Created in the document it goes into: one moved into another document (an iframe) loses its adopted styles.
+  const el = ((parent ?? document.body).ownerDocument ?? document).createElement("loookin-survey");
   for (const [name, value] of contained ? PREVIEW_STYLE : parent ? INLINE_STYLE : HOST_STYLE) el.style.setProperty(name, value, "important");
   const topLayer = !parent && typeof (el as { showPopover?: unknown }).showPopover === "function";
   if (topLayer) el.setAttribute("popover", "manual");
@@ -143,6 +149,8 @@ export function createHostElement(survey: SdkSurvey, webFonts: boolean, parent?:
   root.style.setProperty("visibility", "hidden");
   shadow.appendChild(root);
   (parent ?? document.body).appendChild(el);
+  // WebKit applies sheets adopted before the element was attached only later: assigning again applies them now.
+  if (shadow.adoptedStyleSheets?.length) shadow.adoptedStyleSheets = [...shadow.adoptedStyleSheets];
   let releaseFont: (() => void) | undefined;
   try {
     releaseFont = webFonts ? useFont(survey.design.font) : undefined;

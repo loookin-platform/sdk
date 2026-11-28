@@ -22,3 +22,11 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run size
+      # Real-browser smoke test (tests/browsers/smoke.mjs) against the built dist/.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run test:browsers

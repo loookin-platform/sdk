@@ -22,11 +22,24 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run size
-      # Real-browser smoke test (tests/browsers/smoke.mjs) against the built dist/.
+
+  # Real-browser smoke test (tests/browsers/smoke.mjs) against the built dist/.
+  # Pinned to ubuntu-24.04: the installed Playwright has no browser builds for
+  # the newer image behind ubuntu-latest.
+  browsers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-ubuntu-24.04-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:browsers

@@ -9,14 +9,15 @@
  * options) is one row only from 1000 px; below that it stacks, so that the
  * controls are never squeezed. The row may also wrap.
  *
- * The width is read from `innerWidth` (no layout read) when a step is drawn
- * and on `resize`, at most once per animation frame; a change of layout
- * draws the current screen again.
+ * The width is the stage's (`innerWidth` live, no layout read) when a step
+ * is drawn and on `resize`, at most once per animation frame; a change of
+ * layout draws the current screen again.
  */
 import type { SdkSurvey, Step } from "../types";
 import { SCALES } from "../walk";
 import { h } from "./dom";
 import { edgeOf, type Frame, type FrameEnv } from "./popup";
+import { viewport, type Stage } from "./stage";
 
 /** Under this width the step stacks. */
 export const NARROW_PX = 640;
@@ -31,13 +32,13 @@ export function crowded(step: Step | undefined): boolean {
   return scale.max - scale.min + 1 > 5;
 }
 
-export function bannerFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: string, env: FrameEnv): Frame {
+export function bannerFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: string, env: FrameEnv, stage: Stage = viewport): Frame {
   const position = survey.design.position === "top" ? "top" : "bottom";
   const card = h("div", { class: `card banner ${position} edge-${edgeOf(survey)}`, role: "dialog", "aria-labelledby": labelledBy, dir: "auto" });
   root.appendChild(card);
 
   let step: Step | undefined;
-  const oneRow = () => window.innerWidth >= (crowded(step) ? CROWDED_PX : NARROW_PX);
+  const oneRow = () => stage.width() >= (crowded(step) ? CROWDED_PX : NARROW_PX);
   let row = false;
   const mark = () => {
     row = oneRow();
@@ -47,7 +48,7 @@ export function bannerFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: st
   mark();
 
   let frame = 0;
-  let listening = false;
+  let unlisten: (() => void) | undefined;
   const measure = () => {
     frame = 0;
     if (oneRow() !== row) env.relayout(); // draws the step again through compact(); guarded by the run
@@ -67,15 +68,13 @@ export function bannerFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: st
       return row;
     },
     activate() {
-      if (listening) return;
-      listening = true;
-      addEventListener("resize", onResize);
+      unlisten ??= stage.listen(onResize);
     },
     destroy() {
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
-      if (listening) removeEventListener("resize", onResize);
-      listening = false;
+      unlisten?.();
+      unlisten = undefined;
     },
   };
 }

@@ -88,6 +88,9 @@ export interface SdkSurvey {
   language: string;
 }
 
+/** A survey definition as the list route returns it; what `mountSurveyPreview` draws. */
+export type SurveyDefinition = SdkSurvey;
+
 /** Who the survey requests are for: an identified user, or anonymous mode. */
 export type SurveyIdentity = { user?: string; company?: string } | { anonymous: true };
 

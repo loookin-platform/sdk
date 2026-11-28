@@ -4,6 +4,10 @@
  * host page, restored exactly on close), the focus moves into the card and
  * stays there, and it goes back where it was when the Modal closes. On a
  * narrow screen the card is a sheet at the bottom.
+ *
+ * In a preview (`contained`) the Modal is centred in the preview with its
+ * backdrop over the preview only, and none of that happens: no scroll
+ * lock, no focus moves, no focus trap. Escape stays the run's.
  */
 import type { SdkSurvey } from "../types";
 import { h } from "./dom";
@@ -35,11 +39,12 @@ export function lockScroll(): () => void {
   };
 }
 
-export function modalFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: string): Frame {
+export function modalFrame(survey: SdkSurvey, root: HTMLElement, labelledBy: string, contained = false): Frame {
   const overlay = h("div", { class: `overlay${survey.design.backdrop === false ? "" : " backdrop"}` });
-  const card = h("div", { class: `card modal edge-${edgeOf(survey)}`, role: "dialog", "aria-modal": "true", "aria-labelledby": labelledBy, dir: "auto" });
+  const card = h("div", { class: `card modal edge-${edgeOf(survey)}`, role: "dialog", "aria-modal": contained ? undefined : "true", "aria-labelledby": labelledBy, dir: "auto" });
   overlay.appendChild(card);
   root.appendChild(overlay);
+  if (contained) return { card, placed: overlay, position: "fixed", modal: false, activate() {}, destroy() {} };
 
   // Tab and Shift+Tab go round inside the card.
   card.addEventListener("keydown", (e) => {

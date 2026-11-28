@@ -10,6 +10,10 @@
  * removes everything the survey added and is swallowed. A Modal can always
  * be left with Escape, and a failed send always offers Close, so a survey
  * never traps the page.
+ *
+ * A preview (`Placement.stage`, see preview.ts) runs the same code on a
+ * contained stage; its context keeps the thank you and turns Close into a
+ * restart.
  */
 import type { SurveyEvent } from "../client";
 import type { AnswerInput, SdkSurvey, Step } from "../types";
@@ -22,6 +26,7 @@ import { modalFrame } from "./modal";
 import { popupFrame, type Frame, type FrameEnv } from "./popup";
 import { tooltipFrame } from "./tooltip";
 import { renderStep, type Guard, type StepView } from "./steps";
+import type { Stage } from "./stage";
 
 /** The server's cap for one text answer. */
 export const ANSWER_TEXT_MAX = 20_000;
@@ -39,6 +44,14 @@ export interface RunContext {
   submit(answers: AnswerInput[]): Promise<string>;
   /** The survey is gone; `dismissed` when the respondent closed it unanswered. */
   closed(dismissed: boolean): void;
+  /** Preview: the close button or Escape calls this instead of closing. */
+  onClose?(): void;
+  /** Preview: a step of the definition is on screen. */
+  onStep?(stepKey: string): void;
+  /** Preview: the thank you stays instead of closing itself. */
+  keepThanks?: boolean;
+  /** Preview: the key of the step to start at; the first step when missing or unknown. */
+  start?: string;
 }
 
 export interface Run {
@@ -60,9 +73,12 @@ export interface Placement {
   anchor?: Element;
   /** Tooltip: the anchor node left the page; the element to follow now, or null. */
   reanchor?(): Element | null;
+  /** A contained stage (a preview); the viewport when missing. */
+  stage?: Stage;
 }
 
 const BASE = { description: "", required: false };
+const END_KEY = "__end";
 const DEFAULT_THANKS: Step = { ...BASE, key: "__thanks", type: "thanks", title: "Thank you.", description: "Your answer was sent.", button: "" };
 
 /** Codes worth another try; anything else ends the survey with a message. */
@@ -88,19 +104,26 @@ export function prepareSurvey(survey: SdkSurvey, ctx: RunContext, webFonts: bool
   const env: FrameEnv = { relayout: () => late.relayout(), lost: () => late.lost() };
   try {
     const format = survey.format;
-    if ((format === "embed" && !place.target) || (format === "tooltip" && !place.anchor)) return undefined;
-    host = createHostElement(survey, webFonts, format === "embed" ? place.target : undefined);
+    const stage = place.stage;
+    if (!stage && ((format === "embed" && !place.target) || (format === "tooltip" && !place.anchor))) return undefined;
+    host = createHostElement(survey, webFonts, format === "embed" ? place.target : undefined, stage);
+    // A preview draws its own stand-ins for the page: the Tooltip's anchor, the Embed's block.
+    const decor = stage?.decorate?.(host.root, format) ?? {};
+    const anchor = decor.anchor ?? place.anchor;
     const label = `loookin-s${runs + 1}-title`;
     frame =
       format === "modal"
-        ? modalFrame(survey, host.root, label)
+        ? modalFrame(survey, host.root, label, !!stage?.contained)
         : format === "banner"
-          ? bannerFrame(survey, host.root, label, env)
-          : format === "tooltip"
-            ? tooltipFrame(survey, host.root, label, place.anchor!, env, () => place.reanchor?.() ?? null)
+          ? bannerFrame(survey, host.root, label, env, stage)
+          : format === "tooltip" && anchor
+            ? tooltipFrame(survey, host.root, label, anchor, env, () => place.reanchor?.() ?? null, stage)
             : format === "embed"
-              ? embedFrame(survey, host.root, label)
-              : popupFrame(survey, host.root, label);
+              ? embedFrame(survey, decor.parent ?? host.root, label)
+              : format === "popup"
+                ? popupFrame(survey, host.root, label)
+                : undefined;
+    if (!frame) throw new Error("no frame for this format");
     const run = build(survey, ctx, host, frame, late);
     // Unstyled (a strict CSP without constructable stylesheets): never show a broken survey.
     if (getComputedStyle(frame.placed).position !== frame.position) throw new Error("survey styles did not apply");
@@ -126,7 +149,7 @@ function build(survey: SdkSurvey, ctx: RunContext, host: ReturnType<typeof creat
   const texts = steps.flatMap((s) => [s, ...branchesOf(s).flatMap((b) => b.steps)]).filter((s) => s.type === "text").length;
   const maxLength = Math.min(ANSWER_TEXT_MAX, Math.floor(TEXT_BUDGET / Math.max(1, texts)));
 
-  let walk = startWalk();
+  let walk = startWalk(steps, ctx.start);
   let view: StepView | undefined;
   let revealed = false;
   let finished = false;
@@ -167,7 +190,7 @@ function build(survey: SdkSurvey, ctx: RunContext, host: ReturnType<typeof creat
     bar = h("div", { class: "bar" }, survey.isTest && h("span", { class: "test", title: "Test run: nothing is recorded" }, "Test"));
     if (closable) {
       const x = h("button", { type: "button", class: "x", "aria-label": "Close" }, icon("close", 18));
-      x.addEventListener("click", guard(() => close(true)));
+      x.addEventListener("click", guard(() => (ctx.onClose ? ctx.onClose() : close(true))));
       bar.appendChild(x);
     }
   }
@@ -184,7 +207,8 @@ function build(survey: SdkSurvey, ctx: RunContext, host: ReturnType<typeof creat
     guard((e: KeyboardEvent) => {
       if (e.key === "Escape" && (frame.modal || closable)) {
         e.stopPropagation();
-        close(true);
+        if (ctx.onClose) ctx.onClose();
+        else close(true);
       }
     }) as EventListener,
   );
@@ -218,11 +242,14 @@ function build(survey: SdkSurvey, ctx: RunContext, host: ReturnType<typeof creat
     });
     body.replaceChildren(view.el);
     if (revealed && (focusInside || frame.modal)) view.focus();
+    if (step !== DEFAULT_THANKS && step.key !== END_KEY) ctx.onStep?.(step.key);
   }
 
   function current() {
     const step = walkStep(steps, walk);
     if (!step) return close(false);
+    // A preview started at its thank you shows it as after sending.
+    if (step.type === "thanks" && ctx.keepThanks) return show(step, { flow: false, actions: false, onNext() {} });
     if (revealed && step.type !== "thanks") ctx.report("survey_step_reached", step.key);
     show(step, { flow: true, actions: true, onNext: next });
   }
@@ -257,7 +284,7 @@ function build(survey: SdkSurvey, ctx: RunContext, host: ReturnType<typeof creat
       if (outcome === "ok") {
         finished = true;
         show(thanks ?? DEFAULT_THANKS, { flow: false, actions: false, onNext() {} });
-        if (!embed) thanksTimer = setTimeout(() => close(false), THANKS_MS);
+        if (!embed && !ctx.keepThanks) thanksTimer = setTimeout(() => close(false), THANKS_MS);
         return;
       }
       if (RETRYABLE.includes(outcome)) {
@@ -267,7 +294,7 @@ function build(survey: SdkSurvey, ctx: RunContext, host: ReturnType<typeof creat
         return;
       }
       finished = true;
-      show({ ...BASE, key: "__end", type: "message", title: FINAL[outcome] ?? FINAL_OTHER, button: "Close" }, { flow: false, actions: true, onNext: () => close(false) });
+      show({ ...BASE, key: END_KEY, type: "message", title: FINAL[outcome] ?? FINAL_OTHER, button: "Close" }, { flow: false, actions: true, onNext: () => close(false) });
     } catch {
       close(false);
     }

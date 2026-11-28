@@ -11,10 +11,14 @@
  * a competing z-index cannot misplace it; elsewhere it is fixed with the
  * highest z-index. An Embed is a plain block in the flow of the page. It
  * stays invisible until `reveal()`; an Embed already takes its room then.
+ *
+ * On a contained stage (a preview) the element fills the stage's parent,
+ * never goes into the top layer and uses the preview stylesheet.
  */
 import type { SdkSurvey } from "../types";
 import { h } from "./dom";
-import { CSS, designVars, fontStack, googleFontHref } from "./styles";
+import type { Stage } from "./stage";
+import { CSS, designVars, fontStack, googleFontHref, previewCss } from "./styles";
 
 export interface SurveyHostElement {
   /** The `<loookin-survey>` element itself. */
@@ -32,19 +36,22 @@ export interface SurveyHostElement {
   remove(): void;
 }
 
-let sheet: CSSStyleSheet | undefined;
+/** One constructed stylesheet per kind: live, and preview. */
+const sheets: (CSSStyleSheet | undefined)[] = [];
 
 /** Constructed stylesheets are not subject to a page's `style-src`; `<style>` is the fallback. */
-function addStyles(shadow: ShadowRoot) {
+function addStyles(shadow: ShadowRoot, preview: boolean) {
+  const kind = preview ? 1 : 0;
+  const css = preview ? previewCss() : CSS;
   try {
-    sheet ??= new CSSStyleSheet();
-    if (!sheet.cssRules.length) sheet.replaceSync(CSS);
+    const sheet = (sheets[kind] ??= new CSSStyleSheet());
+    if (!sheet.cssRules.length) sheet.replaceSync(css);
     shadow.adoptedStyleSheets = [sheet];
     return;
   } catch {
-    sheet = undefined;
+    sheets[kind] = undefined;
   }
-  shadow.appendChild(h("style", {}, CSS));
+  shadow.appendChild(h("style", {}, css));
 }
 
 const fonts = new Map<string, { link: HTMLLinkElement; users: number }>();
@@ -80,6 +87,16 @@ const INLINE_STYLE: [string, string][] = [
   ["display", "block"],
 ];
 
+/** Inline styles of a preview's element: it fills its stage, which contains everything drawn in it. */
+const PREVIEW_STYLE: [string, string][] = [
+  ["all", "initial"],
+  ["display", "block"],
+  ["position", "relative"],
+  ["width", "100%"],
+  ["height", "100%"],
+  ["overflow", "hidden"],
+];
+
 /** Inline styles of the element itself: nothing of the page's CSS applies, it takes no room and no clicks. */
 const HOST_STYLE: [string, string][] = [
   ["all", "initial"],
@@ -97,21 +114,27 @@ const HOST_STYLE: [string, string][] = [
   ["z-index", "2147483000"],
 ];
 
-/** `parent`: an Embed's target, which gets the element as its last child; otherwise `document.body`. */
-export function createHostElement(survey: SdkSurvey, webFonts: boolean, parent?: Element): SurveyHostElement {
+/**
+ * `parent`: an Embed's target, which gets the element as its last child;
+ * otherwise `document.body`. A contained `stage` (a preview) puts it into
+ * the stage's parent instead.
+ */
+export function createHostElement(survey: SdkSurvey, webFonts: boolean, parent?: Element, stage?: Stage): SurveyHostElement {
+  const contained = !!stage?.contained;
+  if (contained) parent = stage!.parent;
   const el = document.createElement("loookin-survey");
-  for (const [name, value] of parent ? INLINE_STYLE : HOST_STYLE) el.style.setProperty(name, value, "important");
+  for (const [name, value] of contained ? PREVIEW_STYLE : parent ? INLINE_STYLE : HOST_STYLE) el.style.setProperty(name, value, "important");
   const topLayer = !parent && typeof (el as { showPopover?: unknown }).showPopover === "function";
   if (topLayer) el.setAttribute("popover", "manual");
   const shadow = el.attachShadow({ mode: "open" });
-  addStyles(shadow);
+  addStyles(shadow, contained);
 
   const root = h("div", { class: "root", lang: typeof survey.language === "string" && survey.language ? survey.language : undefined });
   for (const [name, value] of Object.entries(designVars(survey.design))) root.style.setProperty(name, value);
   let font = webFonts ? fontStack(survey.design.font) : undefined;
   if (!font) {
     try {
-      font = getComputedStyle(document.body).fontFamily;
+      font = getComputedStyle(contained ? parent! : document.body).fontFamily;
     } catch {
       // no computed style: the browser's default font
     }

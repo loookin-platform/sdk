@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.1
+
+### Added
+
+- `mountSurveyPreview(target, definition, options?)` in
+  `@loookin/sdk/surveys`: draws one survey definition into an element with
+  the live renderer, for tools that display a survey (such as the Loookin
+  editor). The element's box stands in for the page; nothing is sent or
+  stored, and no triggers run. Options `narrow`, `step`, `interactive`,
+  `webFonts` and `onStep`; returns `{ update, destroy }`. Never throws.
+- Types `SurveyPreview`, `SurveyPreviewOptions` and `SurveyDefinition`.
+
+### Changed
+
+- Internal: the survey frames read sizes and listen for layout changes
+  through a stage (the viewport live, the preview's element in a preview).
+  Nothing changes for live surveys.
+
 ## 0.3.0
 
 ### Added

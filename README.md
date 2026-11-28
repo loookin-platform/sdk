@@ -330,6 +330,48 @@ before a survey is shown), it does not use cookies, it uses browser storage
 for surveys only in anonymous mode, and it does not load code from your
 workspace at run time: the renderer is part of the package you install.
 
+### Previewing a survey
+
+`mountSurveyPreview` is meant for tools that display a survey definition,
+such as the survey editor in Loookin: it draws one definition into an element
+with the same renderer your visitors get. It sends nothing: no requests, no
+events or responses, no storage, no triggers, and no Test label.
+
+```ts
+import { mountSurveyPreview } from "@loookin/sdk/surveys";
+
+const preview = mountSurveyPreview(element, definition, {
+  narrow: false,      // true forces the narrow-screen layout
+  step: "s_2",        // key of the step to show first (default: the first step)
+  interactive: true,  // false draws the survey without letting anyone use it
+  webFonts: false,    // same meaning as surveys.webFonts in init
+  onStep: (stepKey) => {}, // the step on screen changed
+});
+preview.update(nextDefinition, options); // keeps the step on screen when it still exists
+preview.destroy(); // gives the element its children back
+```
+
+- `definition` has the shape the workspace's survey list returns.
+- The element's box is the page: a Popup sits in its corner, a Banner along
+  its edge, a Modal (with its backdrop) in its middle, a Tooltip next to a
+  placeholder anchor and an Embed in a placeholder block. Give the element a
+  width and a height. Its own children are taken out while the preview is in
+  it and put back on `destroy()`. Nothing goes into `document.body`, the page
+  does not stop scrolling and the focus does not move.
+- The layout follows the element's width (narrow under 640 px), unless
+  `narrow` is set.
+- `update(definition)` without options keeps the options given before;
+  options passed to `update` replace only the keys they name.
+- Mounting again on the same element replaces the preview already there;
+  the earlier handle then does nothing.
+- An element that is not on the page or has no width yet is drawn as soon
+  as it has one.
+- The thank you stays on screen; Close starts again at the first step. A
+  preview Modal without a close button ignores Escape (in a customer's page
+  Escape always closes a Modal).
+- It never throws: a definition it cannot draw shows nothing, and the
+  returned methods then do nothing.
+
 ### What a workspace can make the SDK do in your page
 
 Survey definitions come from your workspace, so it is worth knowing their
